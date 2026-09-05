@@ -88,6 +88,11 @@
   .mfill.bad  { background: var(--warn); }
   .mnum { font-size: .78rem; color: var(--ink-soft); font-variant-numeric: tabular-nums;
           min-width: 3.6em; text-align: right; }
+  /* Start over, always on screen while the hunt has skips on: it rides in the
+     sticky bar with the progress so a tester never has to find the menu. It
+     follows the same flag as the Skip buttons and goes with them. */
+  .tool.restart { padding: 7px 12px; min-height: 34px; font-size: .72rem; flex: none;
+                  margin-left: 4px; }
 
   #walk { flex: 1; padding-top: 8px; }
   .stop { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
@@ -278,6 +283,7 @@
       <span class="mlabel">Progress</span>
       <div class="mbar"><div id="progressfill" class="mfill good"></div></div>
       <span class="mnum" id="progresstext"></span>
+      <button class="tool restart" id="restartbtn" hidden>Start over</button>
     </div>
   </div>
   <div id="walk"></div>
@@ -1213,6 +1219,8 @@ async function copyLog() {
   toast("Could not reach the clipboard. Copy it from the box.");
 }
 
+// Reached from the menu, and from the bar button while skips are on. Always
+// through the confirm: a thumb on a phone in the rain is not a decision.
 function confirmRestart() {
   $("modalcard").innerHTML = `<h2>Start over?</h2>
     <div class="sub">This forgets how far you have walked and every answer given.
@@ -1221,6 +1229,7 @@ function confirmRestart() {
       <button class="btn ghost" id="sono">Keep going</button>
       <button class="btn primary" id="soyes">Start over</button>
     </div>`;
+  $("modal").classList.add("show");
   $("sono").onclick = closeModal;
   $("soyes").onclick = () => {
     LS.del("state"); LS.del("sim"); LS.del("started");
@@ -1347,6 +1356,8 @@ function focusCurrent() {
 
 /* ---- wiring ---- */
 $("menubtn").onclick = openMenu;
+$("restartbtn").onclick = confirmRestart;
+$("restartbtn").hidden = !(HUNT && HUNT.skips);
 $("modal").onclick = (ev) => { if (ev.target === $("modal")) closeModal(); };
 // Changing only the hash does not re-run this script, so the flag would appear
 // to do nothing. Reload so it is read again.

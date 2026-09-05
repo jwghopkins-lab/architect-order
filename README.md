@@ -87,9 +87,11 @@ on the phone. The preview is documentation and is not shipped to the player.
 ## Skips, the live distance, and a name that resolves
 
 - **`"skips": true`** at the top of a hunt puts a plain Skip button on every
-  location check, every match and every question. Skipped parts count in the
-  ending as skipped, not wrong. One field: set it false and rebuild before
-  anybody plays for real, and none of them exist.
+  location check, every match and every question, and a Start over button in
+  the bar at the top of the walk that is always on screen. Skipped parts count
+  in the ending as skipped, not wrong. One field: set it false and rebuild
+  before anybody plays for real, and none of them exist. Start over stays in
+  the menu either way.
 - **`"distance": true`** on a stop with a gate shows the distance to the target
   from each usable fix while the gate card is open, rounded the way a person
   would say it. The compass rule is unchanged.
