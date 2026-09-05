@@ -103,11 +103,6 @@
   .shead .no { color: var(--accent); }
   .stitle { font-family: Georgia, serif; font-size: 1.15rem; line-height: 1.3;
             margin-bottom: 12px; }
-  /* Tap to finish the reveal was there from the start and nothing said so. It
-     sits above the text rather than below it: blocks are appended as they are
-     revealed, so anything under them does not stay under them. */
-  .skiptip { margin: -6px 0 12px; font-size: .7rem; color: var(--ink-soft);
-             letter-spacing: .04em; }
   /* Anything hidden must actually be hidden, whatever display a rule above set. */
   [hidden] { display: none !important; }
   .stext { font-family: Georgia, serif; font-size: 1rem; line-height: 1.55;
@@ -145,11 +140,8 @@
 
   /* The gate: a question of presence, before anything is said. */
   .gatewrap { text-align: center; padding: 4px 2px 2px; margin-top: 14px; }
-  .gateask { font-family: Georgia, "Times New Roman", serif; font-size: .95rem;
-             line-height: 1.5; margin-bottom: 10px; }
   .gatestat { font-size: .8rem; color: var(--ink-soft); min-height: 1.2em;
               margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
-  .gatenote { font-size: .68rem; color: var(--ink-soft); margin-top: 6px; }
   .gatedone { margin-top: 14px; font-size: .82rem; color: var(--good);
               font-weight: 600; text-align: center; }
   .gatedone .btn { margin-top: 10px; }
@@ -257,11 +249,12 @@
 </head>
 <body>
 
+<!-- No count of stops anywhere: not under the title, not beside the bar. The
+     bar is the only indication of how far there is to go. -->
 <div class="screen on" id="s-intro">
   <header>
     <div>
       <div class="wordmark">THE ARCHITECT <span>ORDER</span></div>
-      <div class="tagline" id="introtag"></div>
     </div>
   </header>
   <div class="intro" id="introbody"></div>
@@ -273,7 +266,6 @@
   <header>
     <div>
       <div class="wordmark">THE ARCHITECT <span>ORDER</span></div>
-      <div class="tagline" id="walktag"></div>
     </div>
     <button class="menubtn" id="menubtn" aria-label="Menu">⋯</button>
   </header>
@@ -282,7 +274,6 @@
     <div class="meter">
       <span class="mlabel">Progress</span>
       <div class="mbar"><div id="progressfill" class="mfill good"></div></div>
-      <span class="mnum" id="progresstext"></span>
       <button class="tool restart" id="restartbtn" hidden>Start over</button>
     </div>
   </div>
@@ -552,12 +543,15 @@ function skipButton(label, onTap) {
    never goes back: a fix that wobbles out past the line does not un-name the
    place. The pass reveals it too, for a phone that got there without a fix
    ever reading under the line. */
+// name is what a one-line mention of the stop says: its title if it has one,
+// its chapter otherwise.
 function labelOf(s) {
   const r = s.reveal;
-  if (r && STATE.revealed[s.id]) {
-    return { chapter: r.chapter || s.chapter, title: r.title || s.title };
-  }
-  return { chapter: s.chapter, title: s.title };
+  const l = r && STATE.revealed[s.id]
+    ? { chapter: r.chapter || s.chapter, title: r.title || s.title || "" }
+    : { chapter: s.chapter, title: s.title || "" };
+  l.name = l.title || l.chapter;
+  return l;
 }
 // The card is handed in rather than looked up: on a simulated approach the
 // first fix is painted while the card is still being built and is not yet in
@@ -570,7 +564,8 @@ function reveal(s, card) {
   if (!card) return;
   const l = labelOf(s);
   card.querySelector(".shead .chap").textContent = l.chapter;
-  card.querySelector(".stitle").textContent = l.title;
+  const title = card.querySelector(".stitle");
+  if (title && l.title) title.textContent = l.title;
 }
 function saveState() { if (STATE) LS.set("state", STATE); }
 
@@ -595,12 +590,14 @@ window.haptic = haptic;
    stands in front of real walls, presses Log at good and bad alignments, and
    pastes the lot back. It survives Start over on purpose, because the walk
    being reset is not the samples being worthless. */
-const LOG_HEAD = ["stop", "time", "score", "on", "off", "x", "y", "scale", "rot", "matched", "acc_m"];
+const LOG_HEAD = ["stop", "time", "score", "on", "off", "x", "y", "scale", "rot", "matched",
+                  "threshold", "acc_m"];
 function logLine(f) {
   const lines = LS.get("log", []);
   lines.push([f.stop, f.time, f.score.toFixed(3), f.on.toFixed(3), f.off.toFixed(3),
               f.x.toFixed(1), f.y.toFixed(1), f.scale.toFixed(3), f.rot.toFixed(1),
-              f.matched ? "yes" : "no", f.acc == null ? "" : Math.round(f.acc)].join("\t"));
+              f.matched ? "yes" : "no", (f.threshold == null ? 0 : f.threshold).toFixed(2),
+              f.acc == null ? "" : Math.round(f.acc)].join("\t"));
   LS.set("log", lines);
 }
 function logText() {
@@ -627,18 +624,25 @@ function imageFigure(b) {
 }
 
 // Blocks in order: an image appears whole the moment its turn comes, a text
-// block is written out a word at a time and the block after it waits. Tapping
-// the card rushes whatever is left, which is the one thing the reveal has
-// always allowed and never said.
+// block is written out a word at a time and the block after it waits, and a
+// pause block is a held breath before the next one. Rushing dumps whatever is
+// left at once, pauses included.
 function runBlocks(host, blocks, key, done) {
-  const run = { rush: REDUCED || seenSet().has(key), active: null };
+  const run = { rush: REDUCED || seenSet().has(key), active: null, timer: null, flush: null };
   let idx = 0;
   const step = () => {
+    run.timer = null;
     while (idx < blocks.length) {
       const b = blocks[idx];
       const k = key + ":" + idx;
       idx += 1;
       if (b.type === "image") { host.appendChild(imageFigure(b)); continue; }
+      if (b.type === "pause") {
+        if (run.rush) continue;        // nothing to wait for once it is all shown
+        run.active = k;
+        run.timer = setTimeout(step, b.ms);
+        return;
+      }
       const el = document.createElement("div");
       el.className = "stext";
       host.appendChild(el);
@@ -651,29 +655,38 @@ function runBlocks(host, blocks, key, done) {
     markSeen(key);
     if (done) done();
   };
+  // Cut a pause short, or finish the paragraph being written; either way the
+  // rest follows at once because rush is already set.
+  run.flush = () => {
+    if (run.timer) { clearTimeout(run.timer); run.timer = null; step(); return; }
+    const t = typing.get(run.active);
+    if (t) t.finish();
+  };
   step();
   return run;
 }
 
-// One tap finishes the whole card, not just the paragraph currently running.
-// The tip is returned rather than placed: the caller puts it where it will
-// still be once the rest of the blocks have been appended under it.
+// Finishing the reveal is there but not advertised: three taps within a
+// second and a half on the text that is arriving. One or two taps do nothing,
+// so a thumb that brushes the card while reading does not throw the reveal
+// away. It finishes the whole card, not just the paragraph running.
+const RUSH_TAPS = 3;
+const RUSH_WINDOW_MS = 1500;
 function attachRush(card, runs) {
-  const tip = document.createElement("div");
-  tip.className = "skiptip";
-  tip.textContent = "Tap anywhere to see it all at once.";
+  let taps = [];
   card.addEventListener("click", (ev) => {
-    if (ev.target.closest("button, input, a, label, .lensbtn")) return;
-    let flushed = false;
+    if (!ev.target.closest(".stext")) return;
+    const now = performance.now();
+    taps = taps.filter((t) => now - t < RUSH_WINDOW_MS);
+    taps.push(now);
+    if (taps.length < RUSH_TAPS) return;
+    taps = [];
     for (const run of runs) {
       if (!run.active) continue;
       run.rush = true;
-      const t = typing.get(run.active);
-      if (t) { t.finish(); flushed = true; }
+      run.flush();
     }
-    if (flushed) tip.remove();
   });
-  return tip;
 }
 
 /* ---- the walk ---- */
@@ -685,7 +698,6 @@ function renderWalk() {
   const n = HUNT.stops.length;
   const done = Math.min(STATE.current, n);
   $("progressfill").style.width = (100 * done / n) + "%";
-  $("progresstext").textContent = `${done}/${n}`;
   paintSimBanner();
 
   const box = $("walk");
@@ -705,7 +717,7 @@ function pastLine(i) {
              : res === "skipped" ? "Skipped" : "Done";
   const PART = { gate: "check", match: "match" };
   const extra = parts.length ? ` · skipped ${parts.map((p) => PART[p] || p).join(", ")}` : "";
-  div.innerHTML = `<span class="pt">${escapeHtml(labelOf(s).title)}</span>
+  div.innerHTML = `<span class="pt">${escapeHtml(labelOf(s).name)}</span>
     <span class="pr">${word}${extra}</span>`;
   if (s.lens) {
     const b = document.createElement("button");
@@ -724,24 +736,19 @@ function openCard(i) {
   const div = document.createElement("div");
   div.className = "stop";
   div.dataset.idx = i;
+  // No numbering. The chapter is the header, and a title only if there is one.
   const l = labelOf(s);
   div.innerHTML =
-    `<div class="shead"><span class="no">Stop ${i + 1}</span>
-       <span class="chap">${escapeHtml(l.chapter)}</span></div>
-     <div class="stitle">${escapeHtml(l.title)}</div>`;
+    `<div class="shead"><span class="chap">${escapeHtml(l.chapter)}</span></div>`
+    + (l.title ? `<div class="stitle">${escapeHtml(l.title)}</div>` : "");
 
   const runs = [];
-  const tip = attachRush(div, runs);
+  attachRush(div, runs);
   // live: the stop is being read for the first time, rather than a card
   // rebuilt after a tap or a reload. Reduced motion skips the reveal but not
   // the arrival, so the lens still opens on it.
   const live = !seenSet().has("body:" + s.id);
-  const run = runBlocks(div, s.body, "body:" + s.id, () => {
-    tip.remove();
-    afterBody(div, i, runs, live);
-  });
-  runs.push(run);
-  if (run.active) div.querySelector(".stitle").after(tip);
+  runs.push(runBlocks(div, s.body, "body:" + s.id, () => afterBody(div, i, runs, live)));
   return div;
 }
 
@@ -832,13 +839,17 @@ function openLens(s) {
       saveState();
       renderWalk();
     },
-    skips: !!HUNT.skips,
+    testMode: !!HUNT.test_mode,
     onSkip: () => {
       STATE.matched[s.id] = true;
       markSkipped(s, "match");
       saveState();
       renderWalk();
     },
+    // The threshold slider's setting, kept per stop while test mode is on so
+    // the owner can walk about with it. Off test mode, the content's own.
+    threshold: HUNT.test_mode ? LS.get("thr." + s.id, null) : null,
+    onThreshold: (v) => { if (HUNT.test_mode) LS.set("thr." + s.id, v); },
   });
 }
 
@@ -870,11 +881,11 @@ function gateSection(i, card) {
   const s = HUNT.stops[i];
   const wrap = document.createElement("div");
   wrap.className = "gatewrap";
+  // Only the compass, the distance and the button. No prompt: a gate.prompt
+  // in older content is carried through unshown. No privacy note either.
   wrap.innerHTML =
-    `<div class="gateask">${escapeHtml(s.gate.prompt)}</div>
-     <button class="btn primary gatebtn">Check location</button>
-     <div class="gatestat" role="status" aria-live="polite"></div>
-     <div class="gatenote">Read once when you tap it, never tracked.</div>`;
+    `<button class="btn primary gatebtn">Check location</button>
+     <div class="gatestat" role="status" aria-live="polite"></div>`;
   const btn = wrap.querySelector(".gatebtn");
   const stat = wrap.querySelector(".gatestat");
 
@@ -895,7 +906,7 @@ function gateSection(i, card) {
   const watched = s.compass || s.distance || s.reveal;
   if (watched) startFixWatch(s, els);
 
-  if (HUNT.skips) {
+  if (HUNT.test_mode) {
     // Skipping a gate is not passing it, so it does not tick. It does count as
     // having continued, because there is nothing to continue from.
     wrap.appendChild(skipButton("Skip this location check", () => {
@@ -941,7 +952,8 @@ function startFixWatch(s, els) {
       if (!usable) { els.distance.hidden = true; }
       else { els.distance.textContent = aboutM(d); els.distance.hidden = false; }
     }
-    if (s.reveal && usable && d <= s.reveal.at_m) reveal(s, els.card);
+    // at_m of zero means on the pass, never from a fix.
+    if (s.reveal && s.reveal.at_m > 0 && usable && d <= s.reveal.at_m) reveal(s, els.card);
   };
   if (SIM) { paint(SIM.lat, SIM.lon, SIM.acc); return; }
   if (!navigator.geolocation) return;
@@ -1033,7 +1045,7 @@ async function checkin(i, btn, stat, els) {
   }
   const d = haversineM(c.latitude, c.longitude, s.gate.lat, s.gate.lon);
   // The check's own fix is a fix like any other for the name.
-  if (s.reveal && (c.accuracy || 0) <= ACC_USELESS_M && d <= s.reveal.at_m) reveal(s);
+  if (s.reveal && s.reveal.at_m > 0 && (c.accuracy || 0) <= ACC_USELESS_M && d <= s.reveal.at_m) reveal(s);
   if (gatePasses(d, c.accuracy, s.gate.radius_m)) {
     reveal(s);                    // a pass names the place whatever the fixes said
     STATE.gate[s.id] = true;
@@ -1109,7 +1121,7 @@ function questionSection(i) {
   inp.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") { ev.preventDefault(); submit(); }
   });
-  if (HUNT.skips) {
+  if (HUNT.test_mode) {
     wrap.appendChild(skipButton("Skip this question", () => {
       STATE.result[s.id] = "skipped";
       markSkipped(s, "question");
@@ -1143,13 +1155,8 @@ function outroCard() {
   div.className = "stop";
   div.dataset.idx = "end";
   const runs = [];
-  const tip = attachRush(div, runs);
-  const run = runBlocks(div, HUNT.outro || [], "outro", () => {
-    tip.remove();
-    div.appendChild(tally());
-  });
-  runs.push(run);
-  if (run.active) div.prepend(tip);
+  attachRush(div, runs);
+  runs.push(runBlocks(div, HUNT.outro || [], "outro", () => div.appendChild(tally())));
   return div;
 }
 
@@ -1167,13 +1174,13 @@ function tally() {
   const nSkipped = skipped.reduce((n, x) => n + x.parts.length, 0);
   const el = document.createElement("div");
   el.className = "tally";
-  const item = (s) => `<li>${escapeHtml(labelOf(s).title)}</li>`;
+  const item = (s) => `<li>${escapeHtml(labelOf(s).name)}</li>`;
   el.innerHTML = `${right.length} right, ${wrong.length} wrong`
     + (nSkipped ? `, ${nSkipped} skipped.` : ".")
     + (wrong.length ? `<div>Wrong:</div><ul>${wrong.map(item).join("")}</ul>` : "")
     + (nSkipped
         ? `<div>Skipped:</div><ul>${skipped.map((x) =>
-            `<li>${escapeHtml(labelOf(x.s).title)} (${x.parts.map((p) => PART[p]).join(", ")})</li>`)
+            `<li>${escapeHtml(labelOf(x.s).name)} (${x.parts.map((p) => PART[p]).join(", ")})</li>`)
             .join("")}</ul>`
         : "");
   return el;
@@ -1237,6 +1244,7 @@ function confirmRestart() {
     closeModal();
     $("s-walk").classList.remove("on");
     $("s-intro").classList.add("on");
+    renderIntro();
     window.scrollTo(0, 0);
   };
 }
@@ -1274,7 +1282,7 @@ function simControls() {
                    : "not simulating";
   const acc = SIM ? SIM.acc : 20;
   dev.innerHTML =
-    `<span class="devlabel">Testing · ${escapeHtml(labelOf(s).title)}</span>
+    `<span class="devlabel">Testing · ${escapeHtml(labelOf(s).name)}</span>
      <button data-act="start">Start ${SIM_START_M} m away</button>
      <button data-act="step"${SIM ? "" : " disabled"}>Walk ${SIM_STEP_M} m closer</button>
      <button data-act="jump">Jump to ${SIM_JUMP_M} m out</button>
@@ -1357,7 +1365,7 @@ function focusCurrent() {
 /* ---- wiring ---- */
 $("menubtn").onclick = openMenu;
 $("restartbtn").onclick = confirmRestart;
-$("restartbtn").hidden = !(HUNT && HUNT.skips);
+$("restartbtn").hidden = !(HUNT && HUNT.test_mode);
 $("modal").onclick = (ev) => { if (ev.target === $("modal")) closeModal(); };
 // Changing only the hash does not re-run this script, so the flag would appear
 // to do nothing. Reload so it is read again.
@@ -1385,8 +1393,17 @@ function beginWalk() {
   LS.set("started", true);
   $("s-intro").classList.remove("on");
   $("s-walk").classList.add("on");
-  $("walktag").textContent = `${HUNT.stops.length} stops`;
   renderWalk();
+}
+
+// The opening: the intro blocks, revealed word by word like everything else,
+// and one button.
+function renderIntro() {
+  const host = $("introbody");
+  host.innerHTML = "";
+  const runs = [];
+  attachRush(host, runs);
+  runs.push(runBlocks(host, HUNT.intro || [], "intro", null));
 }
 
 (() => {
@@ -1396,15 +1413,6 @@ function beginWalk() {
     return;
   }
   document.title = HUNT.title;
-  $("introtag").textContent = `${HUNT.stops.length} stops`;
-  const host = $("introbody");
-  for (const b of HUNT.intro || []) {
-    if (b.type === "image") { host.appendChild(imageFigure(b)); continue; }
-    const p = document.createElement("div");
-    p.className = "stext";
-    p.textContent = b.text;
-    host.appendChild(p);
-  }
   preloadImages();
 
   STATE = LS.get("state", null);
@@ -1421,8 +1429,10 @@ function beginWalk() {
   if (TESTING) SIM = LS.get("sim", null);
   else { SIM = null; LS.del("sim"); }
 
-  $("startbtn").onclick = beginWalk;
+  // Begin ticks: the same tick as a correct answer, inside the tap.
+  $("startbtn").onclick = () => { haptic(); beginWalk(); };
   if (LS.get("started", false)) beginWalk();
+  else renderIntro();
 })();
 </script>
 </body>

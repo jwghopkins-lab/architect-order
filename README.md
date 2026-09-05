@@ -84,22 +84,35 @@ on the phone. The preview is documentation and is not shipped to the player.
 
 ![The Jewel Tower stencil over its reference photo](app/img/jewel-tower-stencil-preview.jpg)
 
-## Skips, the live distance, and a name that resolves
+## Test mode, the live distance, and a name that resolves
 
-- **`"skips": true`** at the top of a hunt puts a plain Skip button on every
-  location check, every match and every question, and a Start over button in
-  the bar at the top of the walk that is always on screen. Skipped parts count
-  in the ending as skipped, not wrong. One field: set it false and rebuild
-  before anybody plays for real, and none of them exist. Start over stays in
-  the menu either way.
+- **`"test_mode": true`** at the top of a hunt turns on every player-facing
+  testing affordance: a plain Skip button on every location check, every
+  match and every question; the threshold slider in the lens; and a Start
+  over button in the bar at the top of the walk that is always on screen.
+  Skipped parts count in the ending as skipped, not wrong. One field: set it
+  false and rebuild before anybody plays for real, and none of them exist.
+  Start over stays in the menu either way. `#testing` in the address is
+  separate: that is the position simulator, a developer tool.
+- **The threshold slider**, test mode only, runs from 0.05 to 0.95 and starts
+  at the stop's `match.threshold`. Moving it moves the tick on the bar and
+  changes the pass test at once. The setting is kept per stop on the phone
+  while test mode is on, and every Log line records the threshold in force.
 - **`"distance": true`** on a stop with a gate shows the distance to the target
   from each usable fix while the gate card is open, rounded the way a person
   would say it. The compass rule is unchanged.
 - **`"reveal": {"at_m": 500, "chapter": "…", "title": "…"}`** on a stop with a
   gate keeps the stop's written chapter and title until a usable fix reads
   within `at_m`, then changes them, once, for good. Passing the gate reveals
-  it too. `at_m` defaults to 500, where the compass drops out. At least one of
-  `chapter` or `title` is required.
+  it too. `at_m` defaults to 500, where the compass drops out; `0` means only
+  on the pass. At least one of `chapter` or `title` is required.
+- A stop's **`title` is optional**; the card shows the chapter as its header
+  and a title only if there is one. Nothing on a card or the opening counts
+  the stops. A `gate.prompt` is accepted and not shown.
+- **`{"type": "pause", "ms": 1000}`** in any block list holds the next block
+  back by that long, between 100 and 5000 ms. It renders nothing.
+- **Finishing a reveal** is three taps within a second and a half on the text
+  that is arriving. One or two taps do nothing.
 
 ## Deploy
 

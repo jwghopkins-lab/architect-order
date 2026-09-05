@@ -1,7 +1,7 @@
 {
   "id": "fixture",
   "title": "The Architect Order — fixture hunt",
-  "skips": true,
+  "test_mode": true,
   "diary_mm": {"w": 148, "h": 210},
   "intro": [
     {
@@ -63,7 +63,7 @@
       "body": [
         {
           "type": "text",
-          "text": "FIXTURE. This stop will not go on until the phone is within forty metres of a corner of Hyde Park. Which corner is not said yet: the label above this title changes to name it once you are inside five hundred metres, and stays changed.\n\nWhile you are more than five hundred metres out, and only while the phone actually knows where it is, a single compass letter appears under the button. Inside five hundred metres it disappears completely. The distance under it stays all the way in.\n\nThe Skip button is here because this hunt has skips switched on. Turn them off in the content and it goes."
+          "text": "FIXTURE. This stop will not go on until the phone is within forty metres of a corner of Hyde Park. Which corner is not said yet: the label above this title changes to name it once you are inside five hundred metres, and stays changed.\n\nWhile you are more than five hundred metres out, and only while the phone actually knows where it is, a single compass letter appears under the button. Inside five hundred metres it disappears completely. The distance under it stays all the way in.\n\nThe Skip button is here because this hunt has test mode switched on. Turn it off in the content and it goes."
         }
       ],
       "gate": {

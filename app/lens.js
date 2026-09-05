@@ -127,6 +127,12 @@
     #matchtried { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
                   font-size: .74rem; min-width: 3.2em; text-align: right;
                   opacity: .85; font-variant-numeric: tabular-nums; }
+    /* The threshold slider, test mode only: the owner walks about with a
+       setting and reads the number off beside it. */
+    #thrslider { flex: 1; accent-color: #FFD166; height: 34px; }
+    #thrval { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+              font-size: .78rem; min-width: 2.8em; text-align: right;
+              font-variant-numeric: tabular-nums; }
     `;
     document.head.appendChild(s);
   }
@@ -150,6 +156,12 @@
         <div id="lensmatch" hidden>
           <div id="matchbar"><div id="matchfill"></div><div id="matchtick"></div></div>
           <div id="matchnums">score 0.00 · on 0.00 · off 0.00</div>
+          <div class="lensrowb" id="matchthr" hidden>
+            <span class="lensoplab">Threshold</span>
+            <input type="range" id="thrslider" min="0.05" max="0.95" step="0.01"
+                   aria-label="Match threshold">
+            <span id="thrval"></span>
+          </div>
           <div class="lensrowb">
             <button class="lensb" id="matchlog">Log</button>
             <button class="lensb" id="matchskip" hidden>Skip</button>
@@ -588,10 +600,34 @@
       masks: null, maskKey: "",
       timer: null,
     };
-    root.querySelector("#matchtick").style.left = (m.threshold * 100) + "%";
-    root.querySelector("#matchskip").hidden = !cfg.opts.skips;
+    // The threshold in force: the stop's own unless test mode has a saved one.
+    const given = cfg.opts.threshold;
+    match.threshold = typeof given === "number" && given > 0 && given <= 1 ? given : m.threshold;
+    placeTick();
+    root.querySelector("#matchskip").hidden = !cfg.opts.testMode;
+    const row = root.querySelector("#matchthr");
+    row.hidden = !cfg.opts.testMode;
+    if (cfg.opts.testMode) {
+      const slider = root.querySelector("#thrslider");
+      slider.value = match.threshold;
+      root.querySelector("#thrval").textContent = match.threshold.toFixed(2);
+      // Moving it changes the pass test on the very next tick, and moves the
+      // tick on the bar now. The setting is the owner's to keep; the player
+      // hands it back to be saved per stop.
+      slider.oninput = () => {
+        if (!match) return;
+        match.threshold = parseFloat(slider.value);
+        root.querySelector("#thrval").textContent = match.threshold.toFixed(2);
+        placeTick();
+        paintMatch();
+        if (cfg.opts.onThreshold) cfg.opts.onThreshold(match.threshold);
+      };
+    }
     paintMatch();
     match.timer = setInterval(matchTick, MATCH_EVERY_MS);
+  }
+  function placeTick() {
+    root.querySelector("#matchtick").style.left = (match.threshold * 100) + "%";
   }
   function stopMatch() {
     if (match && match.timer) clearInterval(match.timer);
@@ -647,7 +683,7 @@
 
     // Matched is a state, not an event. Fall below the line and it is gone.
     const now = performance.now();
-    if (match.smooth >= match.m.threshold) {
+    if (match.smooth >= match.threshold) {
       if (match.above == null) match.above = now;
       match.matched = now - match.above >= match.m.hold_ms;
     } else {
@@ -857,7 +893,7 @@
     const s = match.smooth == null ? 0 : match.smooth;
     const fill = root.querySelector("#matchfill");
     fill.style.width = (s * 100) + "%";
-    fill.classList.toggle("over", s >= m.threshold);
+    fill.classList.toggle("over", s >= match.threshold);
     root.querySelector("#matchnums").textContent =
       `score ${s.toFixed(2)} · on ${match.on.toFixed(2)} · off ${match.off.toFixed(2)}`;
 
@@ -884,6 +920,7 @@
       on: match.on, off: match.off,
       x: view.x, y: view.y, scale: view.scale, rot: view.rot,
       matched: match.matched,
+      threshold: match.threshold,
       acc: acc == null ? null : acc,
     });
     const b = root.querySelector("#matchlog");

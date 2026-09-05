@@ -54,12 +54,20 @@ def check_blocks(blocks, where, images):
             if not (APP / src).is_file():
                 fail(at, f"image {src!r} is not under app/")
             images.append(src)
+        elif kind == "pause":
+            # A beat between blocks. Bounded, because a pause under a tenth of
+            # a second is a typo and one over five is a page that looks broken.
+            ms = b.get("ms")
+            if not is_num(ms) or not 100 <= ms <= 5000:
+                fail(at, f"pause ms is {ms!r}, must be between 100 and 5000")
         else:
-            fail(at, f"unknown block type {kind!r} (text or image)")
+            fail(at, f"unknown block type {kind!r} (text, image or pause)")
 
 
 def check_gate(gate, where):
-    for field in ("lat", "lon", "radius_m", "prompt"):
+    # No prompt any more: the gate is the compass, the distance and the
+    # button. One left in older content is carried through and not shown.
+    for field in ("lat", "lon", "radius_m"):
         if gate.get(field) is None:
             fail(where, f"gate has no {field}")
     for field in ("lat", "lon", "radius_m"):
@@ -72,8 +80,6 @@ def check_gate(gate, where):
     # tighter radius is a stop that cannot reliably be passed by standing on it.
     if gate["radius_m"] < 20:
         fail(where, f"gate radius_m is {gate['radius_m']}, minimum is 20")
-    if not str(gate["prompt"]).strip():
-        fail(where, "gate prompt is empty")
 
 
 def check_question(q, where):
@@ -150,9 +156,10 @@ def check_reveal(r, where):
     """A name that resolves on approach. Needs somewhere to approach."""
     if not isinstance(r, dict):
         fail(where, "reveal must be an object")
+    # Zero means "on the pass" rather than at a distance.
     at = r.setdefault("at_m", 500)
-    if not is_num(at) or at <= 0:
-        fail(where, f"reveal at_m is {at!r}, must be a positive number of metres")
+    if not is_num(at) or at < 0:
+        fail(where, f"reveal at_m is {at!r}, must be 0 or a number of metres")
     if not str(r.get("chapter") or "").strip() and not str(r.get("title") or "").strip():
         fail(where, "reveal needs a chapter or a title to change to")
 
@@ -163,11 +170,14 @@ def validate(hunt):
     for field in ("id", "title", "stops"):
         if not hunt.get(field):
             fail("hunt", f"no {field}")
-    # One flag for every skip button in the hunt, so they can all be turned
-    # off with one edit before anybody plays for real.
-    skips = hunt.setdefault("skips", False)
-    if not isinstance(skips, bool):
-        fail("hunt", f"skips is {skips!r}, must be true or false")
+    # One flag for every player-facing testing affordance: the Skip buttons,
+    # the threshold slider, the Start over in the bar. One edit turns them all
+    # off before anybody plays for real.
+    if "skips" in hunt:
+        fail("hunt", "skips was renamed test_mode")
+    test_mode = hunt.setdefault("test_mode", False)
+    if not isinstance(test_mode, bool):
+        fail("hunt", f"test_mode is {test_mode!r}, must be true or false")
     check_blocks(hunt.get("intro", []), "hunt.intro", images)
     check_blocks(hunt.get("outro", []), "hunt.outro", images)
 
@@ -186,9 +196,11 @@ def validate(hunt):
             fail(where, "duplicate id")
         seen.add(sid)
 
-        for field in ("chapter", "title"):
-            if not str(s.get(field, "")).strip():
-                fail(where, f"no {field}")
+        if not str(s.get("chapter", "")).strip():
+            fail(where, "no chapter")
+        # A title is optional: the card shows one only when the content gives it.
+        if s.get("title") is not None and not isinstance(s["title"], str):
+            fail(where, "title must be text")
         if not s.get("body"):
             fail(where, "no body")
         check_blocks(s["body"], f"{where}.body", images)
@@ -251,7 +263,7 @@ def build(content_path, out_dir):
           f"{sum(1 for s in hunt['stops'] if s.get('gate'))} gates, "
           f"{sum(1 for s in hunt['stops'] if s.get('question'))} questions, "
           f"{sum(1 for s in hunt['stops'] if s.get('lens'))} lenses, "
-          f"{len(set(images))} images, skips {'on' if hunt['skips'] else 'off'}")
+          f"{len(set(images))} images, test mode {'on' if hunt['test_mode'] else 'off'}")
 
 
 def main():
