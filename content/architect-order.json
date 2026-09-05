@@ -66,6 +66,37 @@
         "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": null}
       },
       "after": []
+    },
+    {
+      "id": "third",
+      "chapter": "Location three",
+      "reveal": {"chapter": "Elizabeth Tower"},
+      "body": [
+        {"type": "text",
+         "text": "George Airy. Astronomer Royal for forty-six years. Arthur's notes come back to him more than to anyone else."},
+        {"type": "text",
+         "text": "After the fire, Airy chaired the commission that decided what the new yard would be. When they built this tower, Airy wrote the specification for its clock: the first stroke of every hour true to within one second, checked twice a day by telegraph to his observatory at Greenwich. It is kept to time with old pennies laid on the pendulum. One penny is worth two fifths of a second a day. And at Greenwich, in 1851, he set the instrument that fixes the line the world's time is measured from."},
+        {"type": "pause", "ms": 1000},
+        {"type": "text",
+         "text": "The yard, the clock, and the line. One man held all three. Arthur wanted to know what he did with them.\n\nCross the square and find the clock."}
+      ],
+      "gate": null,
+      "lens": {
+        "kind": "stencil",
+        "src": "img/elizabeth-tower-stencil.png",
+        "note": "Line the drawing up with the tower.",
+        "auto": true,
+        "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": null}
+      },
+      "question": {
+        "ask": "What do they lay on the pendulum to keep it to time?",
+        "answers": ["PENNIES", "PENNY", "OLD PENNIES", "PENCE", "COINS", "COPPERS"],
+        "guesses": 3
+      },
+      "after": [
+        {"type": "text",
+         "text": "Twice a day, this clock's performance went down the wire to Greenwich, where Airy's line runs through the floor of his observatory. Since 1884 the world has measured its time from that line. Arthur went there. We haven't, yet."}
+      ]
     }
   ]
 }

@@ -91,6 +91,8 @@ on the phone. The preview is documentation and is not shipped to the player.
 
 ![The Abbey west front stencil over its reference photo](app/img/abbey-west-front-stencil-preview.jpg)
 
+![The Elizabeth Tower stencil over its reference photo](app/img/elizabeth-tower-stencil-preview.jpg)
+
 ## The tick
 
 Every tap ticks. On iPhone, Safari ticks a native switch only when a finger
