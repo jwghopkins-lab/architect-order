@@ -98,8 +98,10 @@
   .shead .no { color: var(--accent); }
   .stitle { font-family: Georgia, serif; font-size: 1.15rem; line-height: 1.3;
             margin-bottom: 12px; }
-  /* Tap to finish the reveal was there from the start and nothing said so. */
-  .skiptip { margin-top: 10px; font-size: .7rem; color: var(--ink-soft);
+  /* Tap to finish the reveal was there from the start and nothing said so. It
+     sits above the text rather than below it: blocks are appended as they are
+     revealed, so anything under them does not stay under them. */
+  .skiptip { margin: -6px 0 12px; font-size: .7rem; color: var(--ink-soft);
              letter-spacing: .04em; }
   /* Anything hidden must actually be hidden, whatever display a rule above set. */
   [hidden] { display: none !important; }
@@ -544,11 +546,12 @@ function runBlocks(host, blocks, key, done) {
 }
 
 // One tap finishes the whole card, not just the paragraph currently running.
+// The tip is returned rather than placed: the caller puts it where it will
+// still be once the rest of the blocks have been appended under it.
 function attachRush(card, runs) {
   const tip = document.createElement("div");
   tip.className = "skiptip";
   tip.textContent = "Tap anywhere to see it all at once.";
-  card.appendChild(tip);
   card.addEventListener("click", (ev) => {
     if (ev.target.closest("button, input, a, label, .lensbtn")) return;
     let flushed = false;
@@ -613,10 +616,12 @@ function openCard(i) {
 
   const runs = [];
   const tip = attachRush(div, runs);
-  runs.push(runBlocks(div, s.body, "body:" + s.id, () => {
+  const run = runBlocks(div, s.body, "body:" + s.id, () => {
     tip.remove();
     afterBody(div, i, runs);
-  }));
+  });
+  runs.push(run);
+  if (run.active) div.querySelector(".stitle").after(tip);
   return div;
 }
 
@@ -696,14 +701,14 @@ function gateSection(i) {
      <div class="gatenote">Read once when you tap it, never tracked.</div>`;
   const btn = wrap.querySelector(".gatebtn");
   const stat = wrap.querySelector(".gatestat");
-  btn.onclick = () => checkin(i, btn, stat);
 
   const compass = document.createElement("div");
   compass.className = "compass";
   compass.hidden = true;
   compass.innerHTML = `<span class="cl">Bearing</span><span class="pt"></span>`;
-  wrap.appendChild(compass);
-  startCompass(s, compass);
+  if (s.compass) { wrap.appendChild(compass); startCompass(s, compass); }
+
+  btn.onclick = () => checkin(i, btn, stat, s.compass ? compass : null);
   return wrap;
 }
 
@@ -778,10 +783,20 @@ function metresAway(d) {
                    : `About ${Math.max(10, Math.round(d / 10) * 10)} metres away.`;
 }
 
-async function checkin(i, btn, stat) {
+async function checkin(i, btn, stat, compass) {
   const s = HUNT.stops[i];
   btn.disabled = true;
   stat.textContent = "Finding you…";
+  // One position watch at a time. The compass is already listening, and a
+  // second concurrent high-accuracy watch is two goes at the same radio for
+  // one answer; on some browsers it is worse than wasteful, because the second
+  // watch is simply never called back and the check times out with no fix at
+  // all. Hand the radio over for the length of the check and take it back after.
+  stopCompass();
+  const rearm = () => {
+    btn.disabled = false;
+    if (compass) startCompass(s, compass);
+  };
   let c;
   try {
     c = await getFix();
@@ -789,7 +804,7 @@ async function checkin(i, btn, stat) {
     stat.textContent = err && err.code === 1
       ? "Location is blocked for this site. Allow it in your browser settings."
       : "No usable fix. Step into the open and try again.";
-    btn.disabled = false;
+    rearm();
     return;
   }
   const d = haversineM(c.latitude, c.longitude, s.gate.lat, s.gate.lon);
@@ -805,7 +820,7 @@ async function checkin(i, btn, stat) {
   stat.textContent = (c.accuracy || 0) > ACC_USELESS_M
     ? "No usable fix. Step into the open and try again."
     : metresAway(d);
-  btn.disabled = false;
+  rearm();
 }
 
 /* ---- the question ---- */
@@ -891,10 +906,12 @@ function outroCard() {
   div.dataset.idx = "end";
   const runs = [];
   const tip = attachRush(div, runs);
-  runs.push(runBlocks(div, HUNT.outro || [], "outro", () => {
+  const run = runBlocks(div, HUNT.outro || [], "outro", () => {
     tip.remove();
     div.appendChild(tally());
-  }));
+  });
+  runs.push(run);
+  if (run.active) div.prepend(tip);
   return div;
 }
 
