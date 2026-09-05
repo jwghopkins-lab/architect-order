@@ -269,7 +269,7 @@
   </header>
   <div class="intro" id="introbody"></div>
   <div class="spacer"></div>
-  <button class="btn primary" id="startbtn">Begin</button>
+  <button class="btn primary" id="startbtn" data-strong>Begin</button>
 </div>
 
 <div class="screen" id="s-walk">
@@ -591,12 +591,18 @@ function saveState() { if (STATE) LS.set("state", STATE); }
 // all, so there the tick comes from the switch under the finger (armTicks,
 // below), and this does nothing the phone can feel. Returns what happened,
 // for the test button.
-function haptic() {
-  const out = { vibrate: "none" };
-  // 50 ms: the owner asked for more than the 15 first specified, and a pulse
-  // under about 30 is beneath what many Android motors can make at all.
+// strong is for the taps that carry the player forward: Begin, Continue,
+// Open the camera, Progress, Next, and a right answer. They get two pulses
+// where an ordinary tap gets one, twice the weight. On iPhone there is no
+// stronger tick to reach: the switch under the finger is one fixed impact.
+const TICK_MS = 50;
+const TICK_STRONG = [60, 50, 60];
+function haptic(strong) {
+  const out = { vibrate: "none", strong: !!strong };
+  // 50 ms: a pulse under about 30 is beneath what many Android motors can
+  // make at all.
   try {
-    if (navigator.vibrate) out.vibrate = navigator.vibrate(50) ? "yes" : "refused";
+    if (navigator.vibrate) out.vibrate = navigator.vibrate(strong ? TICK_STRONG : TICK_MS) ? "yes" : "refused";
   } catch (err) { out.vibrate = "error"; }
   haptic.count += 1;
   return out;
@@ -650,7 +656,7 @@ new MutationObserver((muts) => {
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest && ev.target.closest("button");
   if (!b || b.disabled) return;
-  lastTick = haptic();
+  lastTick = haptic(b.hasAttribute("data-strong"));
 }, true);
 
 // What the phone says about itself, and where its tick setting lives. The
@@ -885,6 +891,7 @@ function afterGate(card, i, runs) {
     const btn = document.createElement("button");
     btn.className = "btn primary";
     btn.textContent = "Open the camera";
+    btn.setAttribute("data-strong", "");
     btn.onclick = () => openLens(s);
     row.appendChild(btn);
     card.appendChild(row);
@@ -914,6 +921,7 @@ function nextRow(i) {
   const btn = document.createElement("button");
   btn.className = "btn primary";
   btn.textContent = "Next";        // the outro is the next thing, even after the last stop
+  btn.setAttribute("data-strong", "");
   btn.onclick = () => {
     STATE.current = Math.max(STATE.current, i + 1);
     saveState();
@@ -973,6 +981,7 @@ function gateDone(i) {
   const btn = document.createElement("button");
   btn.className = "btn primary";
   btn.textContent = "Continue";
+  btn.setAttribute("data-strong", "");
   btn.onclick = () => {
     STATE.cont[s.id] = true;
     saveState();
@@ -1203,9 +1212,10 @@ function questionSection(i) {
     const said = inp.value.trim();
     if (!said) { toast("Type something first."); return; }
     if (answerAccepted(said, q.answers)) {
-      // The Check button ticked on its own tap. Enter on the keyboard is not
-      // a tap on a button, so it ticks here, synchronously, before anything.
-      if (viaKey) haptic();
+      // A right answer is a progress moment: the strong pattern, synchronously,
+      // before anything. On the Check button it replaces the single pulse
+      // the tap already started; from the keyboard it is the only tick.
+      haptic(true);
       STATE.result[s.id] = "right";
       saveState();
       renderWalk();

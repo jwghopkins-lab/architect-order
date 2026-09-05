@@ -91,6 +91,17 @@ on the phone. The preview is documentation and is not shipped to the player.
 
 ![The Abbey west front stencil over its reference photo](app/img/abbey-west-front-stencil-preview.jpg)
 
+## The tick
+
+Every tap ticks. On iPhone, Safari ticks a native switch only when a finger
+lands on it, so every button carries an invisible switch stretched over its
+face; the finger lands on the switch, the phone ticks, and the tap carries on
+to the button. That tick is one fixed light impact, Apple's, and a page cannot
+make it heavier or double it. On Android the tick is a vibration: 50 ms for an
+ordinary tap, and two pulses for the taps that carry the player forward,
+which are Begin, Continue, Open the camera, Progress, Next, and a right
+answer. Those buttons carry `data-strong`; that is the one place to tune.
+
 ## Test mode, the live distance, and a name that resolves
 
 - **`"test_mode": true`** at the top of a hunt turns on every player-facing

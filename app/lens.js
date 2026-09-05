@@ -164,7 +164,7 @@
           <div class="lensrowb">
             <button class="lensb" id="matchlog">Log</button>
             <button class="lensb" id="matchskip" hidden>Skip</button>
-            <button class="lensb" id="matchgo" disabled>Progress</button>
+            <button class="lensb" id="matchgo" disabled data-strong>Progress</button>
             <span id="matchtried"></span>
           </div>
         </div>
