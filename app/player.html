@@ -155,6 +155,8 @@
      flips the control silently. */
   #hapticlabel { position: absolute; left: -200vw; top: 0; width: 1px; height: 1px;
                  margin: 0; opacity: .01; pointer-events: none; overflow: hidden; }
+  .tickinfo { margin-top: 10px; font-size: .78rem; line-height: 1.45; color: var(--ink-soft);
+              white-space: pre-line; border-left: 3px solid var(--line); padding-left: 10px; }
   .logbox { width: 100%; min-height: 8em; margin-top: 10px; font-family: ui-monospace,
             SFMono-Regular, Menlo, monospace; font-size: .7rem; padding: 8px;
             border-radius: 8px; border: 1px solid var(--line); background: var(--paper);
@@ -580,16 +582,59 @@ function saveState() { if (STATE) LS.set("state", STATE); }
    callback, because on iPhone those fire nothing. So anything that succeeds
    asynchronously does not tick; it lights a button, and the tap on that
    button ticks. */
+// Returns what happened, for the test button: whether the phone has a
+// vibration API and what it answered, and whether the switch toggled.
 function haptic() {
+  const out = { vibrate: "none", switched: false };
   // 30 ms rather than the 15 first specified: a pulse that short is under
   // what many Android motors can produce at all, and a tick nobody can feel
   // is the same as no tick.
-  try { if (navigator.vibrate) navigator.vibrate(30); } catch (err) { /* unsupported */ }
+  try {
+    if (navigator.vibrate) out.vibrate = navigator.vibrate(30) ? "yes" : "refused";
+  } catch (err) { out.vibrate = "error"; }
   // Clicking the label toggles the switch by activation, which is what iOS
   // ticks on. Assigning checked directly toggles it silently, and that was
-  // the bug: the control flipped, and the phone said nothing.
-  const label = $("hapticlabel");
-  if (label) { try { label.click(); } catch (err) { /* nothing to tick */ } }
+  // the first bug: the control flipped, and the phone said nothing.
+  const label = $("hapticlabel"), sw = $("haptic");
+  if (label && sw) {
+    const was = sw.checked;
+    try { label.click(); } catch (err) { /* nothing to tick */ }
+    // A label that did not reach its control: click the control itself,
+    // which is an activation too.
+    if (sw.checked === was) { try { sw.click(); } catch (err) { /* nothing */ } }
+    out.switched = sw.checked !== was;
+  }
+  return out;
+}
+
+// What the phone says about itself, and where its tick setting lives. The
+// tick either works or it does not, and a phone that says nothing is a phone
+// whose settings get guessed at; this puts the guessing on the screen.
+function hapticReport(r) {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  const ver = (ua.match(/OS (\d+)[._](\d+)/) || ua.match(/Android (\d+(\.\d+)?)/) || [])[0] || "";
+  const inApp = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|GSA\//.test(ua) || (ios && !/Safari/.test(ua));
+  const switchOk = "switch" in document.createElement("input");
+  const facts = [
+    ios ? "iPhone" : android ? "Android" : "not a phone",
+    ver, navigator.standalone ? "Home Screen app" : "", inApp ? "in-app browser" : "",
+    `vibrate: ${r.vibrate}`, `switch: ${switchOk ? "supported" : "unsupported"}, ${r.switched ? "toggled" : "did not toggle"}`,
+  ].filter(Boolean).join(" · ");
+  let advice;
+  if (ios && !switchOk) {
+    advice = "This iPhone's browser does not know the switch control, so it cannot tick. iOS 17.4 or later, in Safari or Chrome.";
+  } else if (ios) {
+    advice = "The switch toggled, so the phone was asked. If nothing was felt: Settings → Sounds & Haptics → System Haptics on, and Haptics set to Always Play or Play in Silent Mode. Settings → Accessibility → Touch → Vibration on. An in-app browser or a Home Screen copy may not tick; open the link in Safari itself.";
+  } else if (android) {
+    advice = r.vibrate === "refused"
+      ? "The browser refused to vibrate. Chrome only allows it after a tap on the page, which this was, so it is likely a site setting: tap the lock icon in the address bar → Permissions, or Chrome → Settings → Site settings, and allow vibration if it is listed."
+      : "Vibrate was accepted, so if nothing was felt it is the phone: Settings → Sound & vibration → Vibration & haptics on, with touch feedback above zero, and Do Not Disturb off.";
+  } else {
+    advice = "A computer has no tick. Try it on the phone.";
+  }
+  return facts + "\n" + advice;
 }
 window.haptic = haptic;
 
@@ -1205,15 +1250,21 @@ function openMenu() {
     <div class="btnrow"><button class="btn ghost" id="mcopylog"${n ? "" : " disabled"}>
       Copy log${n ? ` (${n} line${n === 1 ? "" : "s"})` : ""}</button>${HUNT.test_mode
       ? `<button class="btn ghost" id="mtick">Test the tick</button>` : ""}</div>
+    <div id="tickinfo" class="tickinfo" hidden></div>
     <div id="loghost"></div>
     <div id="simhost"></div>`;
   $("modal").classList.add("show");
   $("mclose").onclick = closeModal;
   $("mrestart").onclick = confirmRestart;
   $("mcopylog").onclick = copyLog;
-  // Test mode only: one tap, one tick, nothing else, so the haptic can be
-  // checked on a phone without walking to a gate.
-  if ($("mtick")) $("mtick").onclick = () => haptic();
+  // Test mode only: one tap, one tick, and a line saying what the phone did
+  // with it, so the haptic can be checked without walking to a gate and a
+  // silent phone says why.
+  if ($("mtick")) $("mtick").onclick = () => {
+    const r = haptic();
+    $("tickinfo").textContent = hapticReport(r);
+    $("tickinfo").hidden = false;
+  };
   if (TESTING) $("simhost").appendChild(simControls());
 }
 
