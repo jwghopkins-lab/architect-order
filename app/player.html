@@ -147,11 +147,14 @@
   .gatedone .btn { margin-top: 10px; }
   .matchwait { margin-top: 12px; font-size: .82rem; color: var(--ink-soft);
                text-align: center; line-height: 1.45; }
-  /* The haptic switch. iOS Safari has no vibration API, but flipping a native
-     switch control fires the system's light tick, so one lives here off the
-     edge of the screen. Not display: none, which would silence it. */
-  #haptic { position: absolute; left: -200vw; top: 0; width: 1px; height: 1px;
-            margin: 0; opacity: .01; pointer-events: none; }
+  /* The haptic switch. iOS Safari has no vibration API, but toggling a native
+     switch control fires the system's light tick, so one lives here in a
+     label off the edge of the screen. Not display: none, which would silence
+     it. The label matters: the tick only comes when the switch is toggled by
+     an activation, and clicking the label is one; setting checked from script
+     flips the control silently. */
+  #hapticlabel { position: absolute; left: -200vw; top: 0; width: 1px; height: 1px;
+                 margin: 0; opacity: .01; pointer-events: none; overflow: hidden; }
   .logbox { width: 100%; min-height: 8em; margin-top: 10px; font-family: ui-monospace,
             SFMono-Regular, Menlo, monospace; font-size: .7rem; padding: 8px;
             border-radius: 8px; border: 1px solid var(--line); background: var(--paper);
@@ -282,7 +285,7 @@
 
 <div id="modal"><div class="card" id="modalcard"></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<input type="checkbox" switch id="haptic" tabindex="-1" aria-hidden="true">
+<label id="hapticlabel" aria-hidden="true"><input type="checkbox" switch id="haptic" tabindex="-1"></label>
 
 <!-- HUNT GOES HERE -->
 <script src="lens.js"></script>
@@ -578,9 +581,15 @@ function saveState() { if (STATE) LS.set("state", STATE); }
    asynchronously does not tick; it lights a button, and the tap on that
    button ticks. */
 function haptic() {
-  try { if (navigator.vibrate) navigator.vibrate(15); } catch (err) { /* unsupported */ }
-  const sw = $("haptic");
-  if (sw) sw.checked = !sw.checked;
+  // 30 ms rather than the 15 first specified: a pulse that short is under
+  // what many Android motors can produce at all, and a tick nobody can feel
+  // is the same as no tick.
+  try { if (navigator.vibrate) navigator.vibrate(30); } catch (err) { /* unsupported */ }
+  // Clicking the label toggles the switch by activation, which is what iOS
+  // ticks on. Assigning checked directly toggles it silently, and that was
+  // the bug: the control flipped, and the phone said nothing.
+  const label = $("hapticlabel");
+  if (label) { try { label.click(); } catch (err) { /* nothing to tick */ } }
 }
 window.haptic = haptic;
 
@@ -1194,13 +1203,17 @@ function openMenu() {
     <div class="btnrow"><button class="btn ghost" id="mclose">Close</button>
       <button class="btn primary" id="mrestart">Start over</button></div>
     <div class="btnrow"><button class="btn ghost" id="mcopylog"${n ? "" : " disabled"}>
-      Copy log${n ? ` (${n} line${n === 1 ? "" : "s"})` : ""}</button></div>
+      Copy log${n ? ` (${n} line${n === 1 ? "" : "s"})` : ""}</button>${HUNT.test_mode
+      ? `<button class="btn ghost" id="mtick">Test the tick</button>` : ""}</div>
     <div id="loghost"></div>
     <div id="simhost"></div>`;
   $("modal").classList.add("show");
   $("mclose").onclick = closeModal;
   $("mrestart").onclick = confirmRestart;
   $("mcopylog").onclick = copyLog;
+  // Test mode only: one tap, one tick, nothing else, so the haptic can be
+  // checked on a phone without walking to a gate.
+  if ($("mtick")) $("mtick").onclick = () => haptic();
   if (TESTING) $("simhost").appendChild(simControls());
 }
 
