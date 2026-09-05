@@ -7,6 +7,16 @@
      carving on a wall, and every input is 16px so iOS never auto-zooms. -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+  /* Palette carried over from london-noticing. Portland stone for the ground,
+     cast iron for the ink, the oxide red of Roman tile courses for the accent.
+
+     Three theme states, not two. An explicit choice stamps data-theme on the
+     root; the default setting stamps nothing and only prefers-color-scheme
+     separates light from dark. So the bare :root carries the whole light
+     palette, the media query redefines tokens for the unstamped dark case, and
+     the [data-theme] blocks let a deliberate choice win in either direction.
+     Every component reads tokens, never a literal, or it renders one theme's
+     text on the other theme's ground. */
   :root {
     --paper: #ECEBE7; --panel: #FAFAF8; --ink: #191B1C; --ink-soft: #5C6163;
     --line: #CFCFC8; --accent: #9E2B25; --accent-soft: #F0DEDB;
@@ -25,6 +35,14 @@
       --key: #2A2E30; --key-ink: #E8E7E3; --shadow: 0 1px 3px rgba(0,0,0,.45);
     }
   }
+  :root[data-theme="dark"] {
+    --paper: #141617; --panel: #1D2022; --ink: #E8E7E3; --ink-soft: #9AA0A2;
+    --line: #363B3D; --accent: #E08078; --accent-soft: #3A2220;
+    --accent-ink: #141617;
+    --good: #6FBF97; --good-soft: #1E3229;
+    --warn: #E08078; --warn-soft: #3A2220;
+    --key: #2A2E30; --key-ink: #E8E7E3; --shadow: 0 1px 3px rgba(0,0,0,.45);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
   body { background: var(--paper); color: var(--ink);
@@ -33,33 +51,1062 @@
   .screen { width: 100%; max-width: 560px; display: none; flex-direction: column;
             min-height: 100dvh; padding: 8px 12px calc(20px + env(safe-area-inset-bottom)); }
   .screen.on { display: flex; }
+  header { display: flex; align-items: center; gap: 10px; padding: 6px 2px; }
   .wordmark { font-family: Georgia, "Times New Roman", serif; font-weight: 700;
-              font-size: 1.2rem; letter-spacing: .08em; padding: 6px 2px; }
+              font-size: 1.15rem; letter-spacing: .08em; line-height: 1.2; }
   .wordmark span { color: var(--accent); }
+  .tagline { font-size: .68rem; color: var(--ink-soft); letter-spacing: .08em;
+             text-transform: uppercase; }
+  .menubtn { margin-left: auto; border: 1px solid var(--line); background: var(--panel);
+             color: var(--ink-soft); border-radius: 999px; width: 44px; height: 44px;
+             font-size: 1.1rem; cursor: pointer; flex: none; }
+  .banner { background: var(--warn-soft); color: var(--warn); border-radius: 8px;
+            font-size: .74rem; padding: 7px 10px; margin: 6px 0; line-height: 1.4; }
+  .banner.sim { background: var(--accent-soft); color: var(--ink); }
+
   .intro { font-family: Georgia, serif; font-size: 1rem; line-height: 1.55;
            padding: 10px 2px 4px; }
+  .spacer { flex: 1; }
+
   .btn { border: none; border-radius: 10px; padding: 14px 0; font-size: .98rem;
-         font-weight: 600; cursor: pointer; width: 100%; min-height: 46px;
-         background: var(--accent); color: var(--accent-ink); }
+         font-weight: 600; cursor: pointer; width: 100%; min-height: 46px; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.primary:disabled { opacity: .45; cursor: default; }
+  .btn.ghost { background: var(--key); color: var(--key-ink); }
+
+  /* The progress bar rides at the top while the walk scrolls under it. */
+  #topbar { position: sticky; top: 0; z-index: 6; background: var(--paper);
+            padding: 6px 2px 8px; border-bottom: 1px solid var(--line);
+            display: flex; flex-direction: column; gap: 5px; }
+  .meter { display: flex; align-items: center; gap: 9px; }
+  .mlabel { font-size: .72rem; color: var(--ink-soft); white-space: nowrap;
+            flex: 0 0 74px; }
+  .mbar { flex: 1; height: 8px; border-radius: 999px; background: var(--key);
+          overflow: hidden; }
+  .mfill { height: 100%; width: 0; border-radius: 999px; transition: width .4s ease; }
+  .mfill.good { background: var(--good); }
+  .mfill.bad  { background: var(--warn); }
+  .mnum { font-size: .78rem; color: var(--ink-soft); font-variant-numeric: tabular-nums;
+          min-width: 3.6em; text-align: right; }
+
+  #walk { flex: 1; padding-top: 8px; }
+  .stop { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+          padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .shead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+           font-size: .72rem; font-weight: 700; letter-spacing: .06em;
+           text-transform: uppercase; color: var(--ink-soft); margin-bottom: 6px; }
+  .shead .no { color: var(--accent); }
+  .stitle { font-family: Georgia, serif; font-size: 1.15rem; line-height: 1.3;
+            margin-bottom: 12px; }
+  /* Tap to finish the reveal was there from the start and nothing said so. */
+  .skiptip { margin-top: 10px; font-size: .7rem; color: var(--ink-soft);
+             letter-spacing: .04em; }
+  /* Anything hidden must actually be hidden, whatever display a rule above set. */
   [hidden] { display: none !important; }
+  .stext { font-family: Georgia, serif; font-size: 1rem; line-height: 1.55;
+           white-space: pre-line; }
+  .stext + .stext { margin-top: 12px; }
+  /* Words, not characters. The whole text is laid out invisibly from the first
+     frame, so the card never grows and lines never re-wrap mid-reveal, and each
+     word then darkens into place. It reads like a voice rather than a machine. */
+  .stext .w { opacity: 0; }
+  .stext .w.on { opacity: 1; transition: opacity .45s ease; }
+  @media (prefers-reduced-motion: reduce) {
+    .stext .w { opacity: 1; }
+  }
+  figure { margin: 12px 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 10px;
+               background: var(--key); }
+  figcaption { font-size: .78rem; color: var(--ink-soft); line-height: 1.45;
+               margin-top: 6px; }
+  .payrule { border-top: 1px solid var(--line); margin: 16px 0 14px; }
+  .srow { margin-top: 14px; }
+
+  /* A finished stop collapses to one line: which stop, what happened. Enough to
+     find your way back to its lens, not enough to re-read the whole card. */
+  .past { display: flex; align-items: center; gap: 10px; background: var(--panel);
+          border: 1px solid var(--line); border-left: 3px solid var(--good);
+          border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+          font-size: .84rem; }
+  .past.miss { border-left-color: var(--warn); }
+  .past .pt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+              white-space: nowrap; }
+  .past .pr { font-size: .74rem; color: var(--ink-soft); white-space: nowrap; }
+  .past .lensbtn { flex: none; }
+
+  /* The gate: a question of presence, before anything is said. */
+  .gatewrap { text-align: center; padding: 4px 2px 2px; margin-top: 14px; }
+  .gateask { font-family: Georgia, "Times New Roman", serif; font-size: .95rem;
+             line-height: 1.5; margin-bottom: 10px; }
+  .gatestat { font-size: .8rem; color: var(--ink-soft); min-height: 1.2em;
+              margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
+  .gatenote { font-size: .68rem; color: var(--ink-soft); margin-top: 6px; }
+  .gatedone { margin-top: 14px; font-size: .82rem; color: var(--good);
+              font-weight: 600; }
+  /* One of eight letters and nothing else. No distance, no "close", because a
+     number that shrinks as you walk is a map, and this game is not a map. */
+  .compass { margin-top: 12px; display: flex; align-items: baseline;
+             justify-content: center; gap: 10px; }
+  .compass .pt { font-family: Georgia, serif; font-size: 2.1rem; font-weight: 700;
+                 letter-spacing: .04em; color: var(--accent); }
+  .compass .cl { font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+                 color: var(--ink-soft); }
+
+  /* The question. */
+  .qask { margin-top: 16px; font-family: Georgia, serif; font-size: 1rem;
+          line-height: 1.5; background: var(--accent-soft); color: var(--ink);
+          border-radius: 10px; padding: 12px; }
+  .qrow { margin-top: 10px; display: flex; gap: 8px; }
+  /* min-width: 0 or the Check button walks off the right of the screen. A flex
+     item will not shrink below the intrinsic width of its content, and a text
+     input's intrinsic width is about twenty characters whatever you set. On a
+     360 px phone the button ended four pixels past the edge; on a 320 px one,
+     forty-four. */
+  .qrow input { flex: 1; min-width: 0; padding: 12px; font-size: 1rem;
+                border-radius: 9px; border: 1.5px solid var(--line);
+                background: var(--paper); color: var(--ink); min-height: 46px; }
+  .qrow input:focus-visible { outline: 2px solid var(--accent); }
+  .qrow .btn { width: 96px; flex: none; padding: 11px 0; }
+  .qmeter { margin-top: 10px; }
+  .qverdict { margin-top: 12px; font-family: Georgia, serif; font-size: 1rem; }
+  .qverdict.yes { color: var(--good); }
+  .qverdict.no { color: var(--warn); }
+  .stop.wrong { animation: shake .35s; }
+  @keyframes shake { 25% { transform: translateX(-6px) } 75% { transform: translateX(6px) } }
+
+  .lensbtn { border: 1px solid var(--accent); background: var(--accent-soft);
+             color: var(--ink); font-size: .82rem; font-weight: 600;
+             padding: 11px 18px; border-radius: 999px; cursor: pointer;
+             min-height: 44px; }
+  .lensrow { margin-top: 14px; display: flex; justify-content: center; }
+
+  .toolrow { display: flex; gap: 6px; justify-content: center; padding: 12px 0 2px;
+             flex-wrap: wrap; }
+  .tool { border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft);
+          font-size: .76rem; padding: 11px 16px; border-radius: 999px; cursor: pointer;
+          min-height: 44px; }
+  .tool:focus-visible, .btn:focus-visible, .lensbtn:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px; }
+  #modal { position: fixed; inset: 0; background: rgba(14,12,10,.55); display: none;
+           align-items: center; justify-content: center; padding: 18px; z-index: 20; }
+  #modal.show { display: flex; }
+  .card { background: var(--panel); color: var(--ink); border-radius: 16px;
+          padding: 22px 20px; max-width: 400px; width: 100%;
+          box-shadow: 0 12px 40px rgba(0,0,0,.35); max-height: 86dvh; overflow-y: auto; }
+  .card h2 { font-family: Georgia, serif; font-size: 1.3rem; margin-bottom: 8px; }
+  .card .sub { color: var(--ink-soft); font-size: .84rem; margin-bottom: 10px; line-height: 1.5; }
+  .btnrow { display: flex; gap: 8px; margin-top: 14px; }
+  .btnrow .btn { flex: 1; padding: 12px 0; font-size: .9rem; }
+  /* The approach simulator. Deliberately styled as scaffolding rather than as
+     part of the walk, so nobody mistakes it for a feature. */
+  .devrow { margin-top: 14px; padding: 10px; border: 1px dashed var(--line);
+            border-radius: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+            align-items: center; }
+  .devrow .devlabel { font-size: .64rem; letter-spacing: .1em; text-transform: uppercase;
+                      color: var(--ink-soft); width: 100%; }
+  .devrow button { border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+                   font: inherit; font-size: .78rem; padding: 9px 12px; border-radius: 999px;
+                   cursor: pointer; min-height: 40px; }
+  .devrow button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .devrow .devdist { font-size: .74rem; color: var(--ink-soft); margin-left: auto;
+                     font-variant-numeric: tabular-nums; }
+  .devnote { width: 100%; font-size: .68rem; color: var(--ink-soft); line-height: 1.45; }
+
+  .tally { font-family: Georgia, serif; font-size: 1rem; line-height: 1.6;
+           margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .tally ul { margin: 8px 0 0 18px; font-size: .92rem; color: var(--ink-soft); }
+
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+           background: var(--ink); color: var(--paper); font-size: .82rem; padding: 10px 16px;
+           border-radius: 14px; opacity: 0; transition: opacity .25s; pointer-events: none;
+           z-index: 30; width: calc(100% - 32px); max-width: 420px; text-align: center;
+           line-height: 1.35; }
+  #toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
 
 <div class="screen on" id="s-intro">
-  <div class="wordmark">THE ARCHITECT <span>ORDER</span></div>
+  <header>
+    <div>
+      <div class="wordmark">THE ARCHITECT <span>ORDER</span></div>
+      <div class="tagline" id="introtag"></div>
+    </div>
+  </header>
   <div class="intro" id="introbody"></div>
-  <div style="flex:1"></div>
-  <button class="btn" id="startbtn">Begin</button>
+  <div class="spacer"></div>
+  <button class="btn primary" id="startbtn">Begin</button>
 </div>
 
+<div class="screen" id="s-walk">
+  <header>
+    <div>
+      <div class="wordmark">THE ARCHITECT <span>ORDER</span></div>
+      <div class="tagline" id="walktag"></div>
+    </div>
+    <button class="menubtn" id="menubtn" aria-label="Menu">⋯</button>
+  </header>
+  <div id="simbanner" class="banner sim" hidden></div>
+  <div id="topbar">
+    <div class="meter">
+      <span class="mlabel">Progress</span>
+      <div class="mbar"><div id="progressfill" class="mfill good"></div></div>
+      <span class="mnum" id="progresstext"></span>
+    </div>
+  </div>
+  <div id="walk"></div>
+</div>
+
+<div id="modal"><div class="card" id="modalcard"></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
 <!-- HUNT GOES HERE -->
+<script src="lens.js"></script>
 <script>
 "use strict";
+const $ = (id) => document.getElementById(id);
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const HUNT = window.HUNT || null;
-document.getElementById("introbody").textContent = HUNT
-  ? HUNT.title + " — the engine is being built. The stops arrive next."
-  : "No hunt was baked into this page.";
+
+// Testing scaffolding is off unless it is asked for by hand. On a real walk
+// there is no button to press, and there is no way to reach one, because a
+// visible control that opens a gated stop is a skip button whatever it is
+// called. Add ?testing=1 or #testing to the address to bring it back.
+// Deliberately NOT enabled by hostname. An earlier version switched itself on
+// for localhost, which meant the local build quietly had scaffolding the real
+// one did not, and the test that was supposed to prove a gate cannot be walked
+// past was running against a page that still had the walk-closer buttons on it.
+// Implicit is how you end up testing the wrong build. Ask for it every time.
+const TESTING = /(?:^|[?&])testing=1(?:&|$)/.test(location.search)
+             || location.hash === "#testing";
+
+const FIX_WINDOW_MS = 7000;    // how long to keep listening for a better fix
+const FIX_GOOD_ENOUGH_M = 20;  // and when to stop waiting for one
+const SIM_START_M = 500;       // where a simulated approach begins
+const SIM_STEP_M = 120;        // and how far one press of the button walks
+// Beyond this, a direction; inside it, nothing at all. A bearing that keeps
+// updating as you close in would be a homing beacon, and the diary is supposed
+// to be the thing that gets you the last five hundred metres.
+const COMPASS_MIN_M = 500;
+
+// Namespaced by hunt, so two hunts served from the same Pages site do not read
+// each other's saved position. A phone that has walked the fixture and then
+// opens a real hunt starts the real one from the beginning.
+const NS = "architect." + (HUNT ? HUNT.id : "none") + ".";
+const LS = {
+  get: (k, d) => { try { return JSON.parse(localStorage.getItem(NS + k)) ?? d; }
+                   catch { return d; } },
+  set: (k, v) => { try { localStorage.setItem(NS + k, JSON.stringify(v)); } catch {} },
+  del: (k) => { try { localStorage.removeItem(NS + k); } catch {} },
+};
+
+let STATE = null;              // { current, gate:{}, result:{}, used:{}, seen:[] }
+let SIM = null;                // { lat, lon, acc, dist } while testing
+let compassWatch = null;       // a live watchPosition, only while a gate is open
+const typing = new Map();
+
+function toast(msg) {
+  $("toast").textContent = msg;
+  $("toast").classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => $("toast").classList.remove("show"), 3400);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function closeModal() { $("modal").classList.remove("show"); }
+
+/* ---- the word-by-word reveal, kept from london-noticing ---- */
+const TYPE_SLOWDOWN = 2.6;
+const SENTENCE_PAUSE_MS = 700;
+function typeInto(el, text, key, delay, onDone) {
+  el.textContent = "";
+  const words = [];
+  for (const tok of text.split(/(\s+)/)) {
+    if (!tok) continue;
+    if (/^\s+$/.test(tok)) { el.appendChild(document.createTextNode(tok)); continue; }
+    const w = document.createElement("span");
+    w.className = "w"; w.textContent = tok;
+    el.appendChild(w); words.push(w);
+  }
+  const step = Math.max(8, Math.min(22, Math.floor(3200 / Math.max(1, text.length))))
+               * TYPE_SLOWDOWN;
+  const bounds = [];
+  let s0 = 0;
+  words.forEach((w, k) => {
+    if (/[.?!]["')\]]?$/.test(w.textContent) || k === words.length - 1) {
+      bounds.push([s0, k]); s0 = k + 1;
+    }
+  });
+  const posIn = (k) => {
+    for (const [a, b] of bounds) if (k >= a && k <= b) return b === a ? 0.5 : (k - a) / (b - a);
+    return 0.5;
+  };
+  let k = 0, t = null;
+  const finish = () => {
+    clearTimeout(t); typing.delete(key);
+    for (const w of words) w.classList.remove("w", "on");
+    if (onDone) onDone();
+  };
+  const tick = () => {
+    if (k >= words.length) { finish(); return; }
+    const w = words[k];
+    w.classList.add("on");
+    const curve = 1.35 - 0.7 * Math.sin(Math.PI * posIn(k));
+    let wait = step * (w.textContent.length + 1) * curve;
+    if (/[.?!]["')\]]?$/.test(w.textContent)) wait += SENTENCE_PAUSE_MS;
+    k += 1;
+    t = setTimeout(tick, wait);
+  };
+  t = setTimeout(tick, delay || 0);
+  typing.set(key, { finish });
+  return finish;
+}
+function seenSet() { return new Set(STATE ? STATE.seen : []); }
+function markSeen(key) {
+  if (!STATE) return;
+  const s = seenSet(); s.add(key);
+  STATE.seen = [...s];
+  saveState();
+}
+
+/* ---- geography. The same haversine and the same pass rule as london-noticing. ---- */
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371008.8, r = Math.PI / 180;
+  const p1 = lat1 * r, p2 = lat2 * r;
+  const a = Math.sin((lat2 - lat1) * r / 2) ** 2
+          + Math.cos(p1) * Math.cos(p2) * Math.sin((lon2 - lon1) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+/* Gate tolerance, retuned after walking Saint-Antonin, where a 50 m gate opened
+   from more than 50 m away, round a corner, on a different street.
+
+   A phone's reported accuracy is roughly a 68% confidence radius. Subtracting
+   all of it means "open if there is any plausible chance you are inside", which
+   turned a 50 m gate into a 50 + accuracy gate; under the old 150 m cap a poor
+   fix opened a 50 m gate from 200 m. So the allowance is now small and fixed,
+   and the reach of any gate is its radius plus 15 m and nothing more.
+
+   Refusing a hopeless fix is the important half. Believing one is how a gate
+   opens somewhere the walker has never stood, and that is worse than refusing,
+   because refusing is visible and they have a pass button. */
+const ACC_ALLOWANCE_M = 15;
+const ACC_USELESS_M = 75;
+
+function gatePasses(distanceM, accuracyM, radiusM) {
+  const acc = Math.max(0, accuracyM || 0);
+  if (acc > ACC_USELESS_M) return false;
+  return distanceM - Math.min(acc, ACC_ALLOWANCE_M) <= radiusM;
+}
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180;
+  const p1 = lat1 * r, p2 = lat2 * r, dl = (lon2 - lon1) * r;
+  return (Math.atan2(Math.sin(dl) * Math.cos(p2),
+                     Math.cos(p1) * Math.sin(p2)
+                     - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / r + 360) % 360;
+}
+function destPoint(lat, lon, bearing, metres) {
+  const R = 6371008.8, r = Math.PI / 180;
+  const d = metres / R, b = bearing * r, p1 = lat * r, l1 = lon * r;
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d)
+                       + Math.cos(p1) * Math.sin(d) * Math.cos(b));
+  const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1),
+                             Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  return { lat: p2 / r, lon: ((l2 / r + 540) % 360) - 180 };
+}
+const POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+function compassPoint(fromLat, fromLon, toLat, toLon) {
+  return POINTS[Math.round(bearingDeg(fromLat, fromLon, toLat, toLon) / 45) % 8];
+}
+
+/* ---- answers, checked forgivingly ----
+   Nobody is being marked on their spelling, and being told you are wrong when
+   you typed "3" instead of "three" would be maddening while standing in a
+   square in the rain. Taken from london-noticing unchanged. */
+function normalise(text, keepPlural) {
+  const out = String(text).toLowerCase()
+    // Polish crossed L is its own letter, not l plus a mark, so NFD leaves it
+    // alone and the strip below then deletes it. "cegla" survived and "cegla"
+    // with the stroke came out as "ceg a". Map it by hand before decomposing.
+    .replace(/\u0142/g, "l")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ")
+    // Filler only. NEVER strip a word that could itself be an answer: "two" and
+    // "pair" were in this list to make "a pair of unicorns" match "unicorns",
+    // and the result was that typing "two" at a stop whose answer IS two
+    // normalised to nothing and was marked wrong. The split-on-words check
+    // below already handles an answer buried in a phrase.
+    .replace(/\b(a|an|the|is|it|its|they|are|of)\b/g, " ");
+  return (keepPlural ? out : out.replace(/s\b/g, ""))
+    .replace(/\s+/g, " ").trim();
+}
+// One typo should not stand between somebody and the rest of the walk. Only for
+// answers of five characters or more, where a single edit is almost certainly a
+// slip on a phone keyboard rather than a different word: at four characters or
+// fewer, "four" and "your" are one edit apart and so are far too many numbers.
+function withinOneEdit(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (a.length < b.length) j++;
+    else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+// Two letters swapped round is the commonest phone typo of the lot, and it
+// costs two edits under the rule above, so it needs its own case. "brickwrok"
+// should not be the thing that ends somebody's walk.
+function oneSwapApart(a, b) {
+  if (a.length !== b.length) return false;
+  const at = [];
+  for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) at.push(k);
+  return at.length === 2 && at[1] === at[0] + 1
+      && a[at[0]] === b[at[1]] && a[at[1]] === b[at[0]];
+}
+function matchesUnder(given, accepted, keepPlural) {
+  const g = normalise(given, keepPlural);
+  if (!g) return false;
+  const words = g.split(" ");
+  return accepted.some((a) => {
+    const want = normalise(a, keepPlural);
+    if (!want) return false;
+    if (g === want || words.includes(want)) return true;
+    if (want.length < 5) return false;
+    return withinOneEdit(g, want) || oneSwapApart(g, want)
+        || words.some((w) => withinOneEdit(w, want) || oneSwapApart(w, want));
+  });
+}
+// Tried both with the plural strip and without it. Dropping the last letter of
+// "english" leaves "englis", and the strip then turns that into "engli", which
+// is two edits from the answer instead of one, so a single slip was rejected.
+// Comparing the unstripped forms as well never refuses anything the stripped
+// pass would have accepted; the cross-stop rejection checks prove it does not
+// tip over into saying yes to everything.
+function answerAccepted(given, accepted) {
+  return matchesUnder(given, accepted, false)
+      || matchesUnder(given, accepted, true);
+}
+
+/* ---- state ---- */
+function freshState() {
+  return { current: 0, gate: {}, result: {}, used: {}, seen: [] };
+}
+function saveState() { if (STATE) LS.set("state", STATE); }
+
+/* ---- blocks ---- */
+function imageFigure(b) {
+  const fig = document.createElement("figure");
+  const img = document.createElement("img");
+  img.src = b.src;
+  img.alt = b.alt || "";
+  img.loading = "eager";
+  fig.appendChild(img);
+  if (b.caption) {
+    const cap = document.createElement("figcaption");
+    cap.textContent = b.caption;
+    fig.appendChild(cap);
+  }
+  return fig;
+}
+
+// Blocks in order: an image appears whole the moment its turn comes, a text
+// block is written out a word at a time and the block after it waits. Tapping
+// the card rushes whatever is left, which is the one thing the reveal has
+// always allowed and never said.
+function runBlocks(host, blocks, key, done) {
+  const run = { rush: REDUCED || seenSet().has(key), active: null };
+  let idx = 0;
+  const step = () => {
+    while (idx < blocks.length) {
+      const b = blocks[idx];
+      const k = key + ":" + idx;
+      idx += 1;
+      if (b.type === "image") { host.appendChild(imageFigure(b)); continue; }
+      const el = document.createElement("div");
+      el.className = "stext";
+      host.appendChild(el);
+      if (run.rush) { el.textContent = b.text; continue; }
+      run.active = k;
+      typeInto(el, b.text, k, idx === 1 ? 120 : 240, step);
+      return;                          // the reveal calls step() when it lands
+    }
+    run.active = null;
+    markSeen(key);
+    if (done) done();
+  };
+  step();
+  return run;
+}
+
+// One tap finishes the whole card, not just the paragraph currently running.
+function attachRush(card, runs) {
+  const tip = document.createElement("div");
+  tip.className = "skiptip";
+  tip.textContent = "Tap anywhere to see it all at once.";
+  card.appendChild(tip);
+  card.addEventListener("click", (ev) => {
+    if (ev.target.closest("button, input, a, label, .lensbtn")) return;
+    let flushed = false;
+    for (const run of runs) {
+      if (!run.active) continue;
+      run.rush = true;
+      const t = typing.get(run.active);
+      if (t) { t.finish(); flushed = true; }
+    }
+    if (flushed) tip.remove();
+  });
+  return tip;
+}
+
+/* ---- the walk ---- */
+function stopResult(s) { return STATE.result[s.id] || null; }
+function lensUnlocked(s) { return !s.gate || !!STATE.gate[s.id]; }
+
+function renderWalk() {
+  stopCompass();
+  const n = HUNT.stops.length;
+  const done = Math.min(STATE.current, n);
+  $("progressfill").style.width = (100 * done / n) + "%";
+  $("progresstext").textContent = `${done}/${n}`;
+  paintSimBanner();
+
+  const box = $("walk");
+  box.innerHTML = "";
+  for (let i = 0; i < done; i++) box.appendChild(pastLine(i));
+  box.appendChild(done === n ? outroCard() : openCard(done));
+  focusCurrent();
+}
+
+function pastLine(i) {
+  const s = HUNT.stops[i];
+  const res = stopResult(s);
+  const div = document.createElement("div");
+  div.className = "past" + (res === "wrong" ? " miss" : "");
+  div.innerHTML = `<span class="pt">${escapeHtml(s.title)}</span>
+    <span class="pr">${res === "right" ? "Right" : res === "wrong" ? "Wrong" : "Done"}</span>`;
+  if (s.lens) {
+    const b = document.createElement("button");
+    b.className = "lensbtn";
+    b.textContent = "Lens";
+    b.onclick = () => openLens(s);
+    div.appendChild(b);
+  }
+  return div;
+}
+
+// The open stop. Each part is appended by the part before it finishing, so the
+// card grows downwards at reading speed rather than arriving all at once.
+function openCard(i) {
+  const s = HUNT.stops[i];
+  const div = document.createElement("div");
+  div.className = "stop";
+  div.dataset.idx = i;
+  div.innerHTML =
+    `<div class="shead"><span class="no">Stop ${i + 1}</span>
+       <span>${escapeHtml(s.chapter)}</span></div>
+     <div class="stitle">${escapeHtml(s.title)}</div>`;
+
+  const runs = [];
+  const tip = attachRush(div, runs);
+  runs.push(runBlocks(div, s.body, "body:" + s.id, () => {
+    tip.remove();
+    afterBody(div, i, runs);
+  }));
+  return div;
+}
+
+function afterBody(card, i, runs) {
+  const s = HUNT.stops[i];
+  if (s.gate && !STATE.gate[s.id]) { card.appendChild(gateSection(i)); return; }
+  if (s.gate) card.appendChild(gateDone());
+  afterGate(card, i, runs);
+}
+
+function afterGate(card, i, runs) {
+  const s = HUNT.stops[i];
+  if (s.lens) card.appendChild(lensRow(s));
+  if (s.question && !stopResult(s)) { card.appendChild(questionSection(i)); return; }
+  if (s.question) card.appendChild(verdictLine(s));
+  afterResolved(card, i, runs);
+}
+
+function afterResolved(card, i, runs) {
+  const s = HUNT.stops[i];
+  if (!stopResult(s)) { STATE.result[s.id] = "done"; saveState(); }
+  const blocks = s.after || [];
+  const finish = () => card.appendChild(nextRow(i));
+  if (!blocks.length) { finish(); return; }
+  const rule = document.createElement("div");
+  rule.className = "payrule";
+  card.appendChild(rule);
+  runs.push(runBlocks(card, blocks, "after:" + s.id, finish));
+}
+
+function nextRow(i) {
+  const row = document.createElement("div");
+  row.className = "srow";
+  const btn = document.createElement("button");
+  btn.className = "btn primary";
+  btn.textContent = i === HUNT.stops.length - 1 ? "Finish" : "Next";
+  btn.onclick = () => {
+    STATE.current = Math.max(STATE.current, i + 1);
+    saveState();
+    renderWalk();
+  };
+  row.appendChild(btn);
+  return row;
+}
+
+function lensRow(s) {
+  const row = document.createElement("div");
+  row.className = "lensrow";
+  const b = document.createElement("button");
+  b.className = "lensbtn";
+  b.textContent = "Lens";
+  b.onclick = () => openLens(s);
+  row.appendChild(b);
+  return row;
+}
+function openLens(s) {
+  if (!window.Lens) { toast("The lens did not load."); return; }
+  window.Lens.open(s.lens, HUNT.diary_mm || { w: 148, h: 210 });
+}
+
+function gateDone() {
+  const d = document.createElement("div");
+  d.className = "gatedone";
+  d.textContent = "You're here.";
+  return d;
+}
+
+/* ---- the gate ---- */
+function gateSection(i) {
+  const s = HUNT.stops[i];
+  const wrap = document.createElement("div");
+  wrap.className = "gatewrap";
+  wrap.innerHTML =
+    `<div class="gateask">${escapeHtml(s.gate.prompt)}</div>
+     <button class="btn primary gatebtn">Check location</button>
+     <div class="gatestat" role="status" aria-live="polite"></div>
+     <div class="gatenote">Read once when you tap it, never tracked.</div>`;
+  const btn = wrap.querySelector(".gatebtn");
+  const stat = wrap.querySelector(".gatestat");
+  btn.onclick = () => checkin(i, btn, stat);
+
+  const compass = document.createElement("div");
+  compass.className = "compass";
+  compass.hidden = true;
+  compass.innerHTML = `<span class="cl">Bearing</span><span class="pt"></span>`;
+  wrap.appendChild(compass);
+  startCompass(s, compass);
+  return wrap;
+}
+
+// The bearing only while the gate card is open, only on a fix good enough to
+// mean anything, and only from far enough away that it is a direction rather
+// than a finder. Under COMPASS_MIN_M it shows nothing: not "close", nothing.
+function startCompass(s, el) {
+  const paint = (lat, lon, acc) => {
+    const usable = (acc || 0) <= ACC_USELESS_M;
+    const d = haversineM(lat, lon, s.gate.lat, s.gate.lon);
+    if (!usable || d <= COMPASS_MIN_M) { el.hidden = true; return; }
+    el.querySelector(".pt").textContent = compassPoint(lat, lon, s.gate.lat, s.gate.lon);
+    el.hidden = false;
+  };
+  if (SIM) { paint(SIM.lat, SIM.lon, SIM.acc); return; }
+  if (!navigator.geolocation) return;
+  compassWatch = navigator.geolocation.watchPosition(
+    (pos) => paint(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+    () => { el.hidden = true; },
+    { enableHighAccuracy: true, maximumAge: 5000 });
+}
+// A watch left running is a phone battery spent on a stop nobody is looking at,
+// on a walk that still has to get everybody home.
+function stopCompass() {
+  if (compassWatch !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(compassWatch);
+  }
+  compassWatch = null;
+}
+
+function getFix() {
+  if (SIM) {
+    return Promise.resolve({ latitude: SIM.lat, longitude: SIM.lon, accuracy: SIM.acc });
+  }
+  // Phones hand over a coarse network fix first and a good satellite fix a few
+  // seconds later. Taking the first one and subtracting its large error is how
+  // a gate opens from the next street, so watch for a few seconds and keep the
+  // best reading rather than the first. maximumAge is 0 because a cached fix
+  // from twenty seconds ago is twenty-five metres of walking out of date.
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error("nogeo")); return; }
+    let best = null, done = false, id = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (id !== null) navigator.geolocation.clearWatch(id);
+      if (best) resolve(best); else reject(new Error("nofix"));
+    };
+    const timer = setTimeout(finish, FIX_WINDOW_MS);
+    id = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!best || pos.coords.accuracy < best.accuracy) best = pos.coords;
+        if (best.accuracy <= FIX_GOOD_ENOUGH_M) finish();
+      },
+      // Without the clearWatch, a refused or failed fix left a high-accuracy
+      // watch running for the rest of the afternoon, on a phone somebody still
+      // needs at the end of it.
+      (err) => {
+        if (best) return;
+        done = true;
+        clearTimeout(timer);
+        if (id !== null) navigator.geolocation.clearWatch(id);
+        reject(err);
+      },
+      { enableHighAccuracy: true, timeout: FIX_WINDOW_MS, maximumAge: 0 });
+  });
+}
+
+function metresAway(d) {
+  return d >= 1000 ? `About ${(d / 1000).toFixed(1)} kilometres away.`
+                   : `About ${Math.max(10, Math.round(d / 10) * 10)} metres away.`;
+}
+
+async function checkin(i, btn, stat) {
+  const s = HUNT.stops[i];
+  btn.disabled = true;
+  stat.textContent = "Finding you…";
+  let c;
+  try {
+    c = await getFix();
+  } catch (err) {
+    stat.textContent = err && err.code === 1
+      ? "Location is blocked for this site. Allow it in your browser settings."
+      : "No usable fix. Step into the open and try again.";
+    btn.disabled = false;
+    return;
+  }
+  const d = haversineM(c.latitude, c.longitude, s.gate.lat, s.gate.lon);
+  if (gatePasses(d, c.accuracy, s.gate.radius_m)) {
+    STATE.gate[s.id] = true;
+    saveState();
+    stat.textContent = "You're here.";
+    renderWalk();
+    return;
+  }
+  // A vague fix is not a near miss, it is no information, and saying a distance
+  // about it would be a lie. Say that it is unusable and nothing else.
+  stat.textContent = (c.accuracy || 0) > ACC_USELESS_M
+    ? "No usable fix. Step into the open and try again."
+    : metresAway(d);
+  btn.disabled = false;
+}
+
+/* ---- the question ---- */
+function questionSection(i) {
+  const s = HUNT.stops[i];
+  const q = s.question;
+  const limit = q.guesses || 3;
+  const wrap = document.createElement("div");
+  wrap.innerHTML =
+    `<div class="qask">${escapeHtml(q.ask)}</div>
+     <div class="qrow">
+       <input type="text" maxlength="60" enterkeyhint="send" autocapitalize="off"
+              autocorrect="off" spellcheck="false" autocomplete="off"
+              placeholder="your answer" aria-label="Your answer">
+       <button class="btn primary">Check</button>
+     </div>
+     <div class="qmeter meter">
+       <span class="mlabel">Guesses</span>
+       <div class="mbar"><div class="mfill bad"></div></div>
+       <span class="mnum"></span>
+     </div>`;
+
+  const inp = wrap.querySelector("input");
+  const fill = wrap.querySelector(".mfill");
+  const num = wrap.querySelector(".mnum");
+  const paint = () => {
+    const used = Math.min(STATE.used[s.id] || 0, limit);
+    fill.style.width = (100 * used / limit) + "%";
+    num.textContent = `${limit - used} left`;
+  };
+  paint();
+
+  const submit = () => {
+    const said = inp.value.trim();
+    if (!said) { toast("Type something first."); return; }
+    if (answerAccepted(said, q.answers)) {
+      STATE.result[s.id] = "right";
+      saveState();
+      renderWalk();
+      return;
+    }
+    // Read the count back out of the state, not off the closure. The card is
+    // not re-rendered on a wrong answer, so a closure copy stayed at zero and
+    // the second wrong answer kept writing one.
+    const used = (STATE.used[s.id] || 0) + 1;
+    STATE.used[s.id] = used;
+    if (used >= limit) STATE.result[s.id] = "wrong";
+    saveState();
+    if (used >= limit) { renderWalk(); return; }
+    const card = wrap.closest(".stop");
+    void card.offsetWidth;
+    card.classList.add("wrong");
+    setTimeout(() => card.classList.remove("wrong"), 400);
+    paint();
+    inp.select();
+  };
+  wrap.querySelector(".btn").onclick = submit;
+  inp.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); submit(); }
+  });
+  return wrap;
+}
+
+// A resolved question keeps its ask on the card, so the pay-off underneath is
+// read against the thing that was asked rather than on its own.
+function verdictLine(s) {
+  const wrap = document.createElement("div");
+  const right = stopResult(s) === "right";
+  // Prefer a spelled-out answer over a digit when both are accepted: "three" is
+  // what the diary says, and "3" would read as a score.
+  const shown = s.question.answers.find((x) => /[a-z]/i.test(x)) || s.question.answers[0];
+  wrap.innerHTML =
+    `<div class="qask">${escapeHtml(s.question.ask)}</div>
+     <div class="qverdict ${right ? "yes" : "no"}">${right
+        ? "Yes." : `Marked wrong. The answer was ${escapeHtml(shown)}.`}</div>`;
+  return wrap;
+}
+
+/* ---- the ending ---- */
+function outroCard() {
+  const div = document.createElement("div");
+  div.className = "stop";
+  div.dataset.idx = "end";
+  const runs = [];
+  const tip = attachRush(div, runs);
+  runs.push(runBlocks(div, HUNT.outro || [], "outro", () => {
+    tip.remove();
+    div.appendChild(tally());
+  }));
+  return div;
+}
+
+function tally() {
+  const asked = HUNT.stops.filter((s) => s.question);
+  const right = asked.filter((s) => STATE.result[s.id] === "right");
+  const wrong = asked.filter((s) => STATE.result[s.id] === "wrong");
+  const el = document.createElement("div");
+  el.className = "tally";
+  el.innerHTML = `${right.length} right, ${wrong.length} wrong.`
+    + (wrong.length
+        ? `<ul>${wrong.map((s) => `<li>${escapeHtml(s.title)}</li>`).join("")}</ul>`
+        : "");
+  return el;
+}
+
+/* ---- the menu ---- */
+function openMenu() {
+  $("modalcard").innerHTML = `<h2>Menu</h2>
+    <div class="sub">Progress lives on this phone and nowhere else.</div>
+    <div class="btnrow"><button class="btn ghost" id="mclose">Close</button>
+      <button class="btn primary" id="mrestart">Start over</button></div>
+    <div id="simhost"></div>`;
+  $("modal").classList.add("show");
+  $("mclose").onclick = closeModal;
+  $("mrestart").onclick = confirmRestart;
+  if (TESTING) $("simhost").appendChild(simControls());
+}
+
+function confirmRestart() {
+  $("modalcard").innerHTML = `<h2>Start over?</h2>
+    <div class="sub">This forgets how far you have walked and every answer given.
+    Nothing else is kept, and it cannot be undone.</div>
+    <div class="btnrow">
+      <button class="btn ghost" id="sono">Keep going</button>
+      <button class="btn primary" id="soyes">Start over</button>
+    </div>`;
+  $("sono").onclick = closeModal;
+  $("soyes").onclick = () => {
+    LS.del("state"); LS.del("sim"); LS.del("started");
+    STATE = freshState(); SIM = null; lastFocused = null;
+    closeModal();
+    $("s-walk").classList.remove("on");
+    $("s-intro").classList.add("on");
+    window.scrollTo(0, 0);
+  };
+}
+
+/* ---- the approach simulator ----
+   A way to exercise the gates without being in the park. It simulates WALKING,
+   not arriving. There is no control that places you at a stop and no control
+   that opens one. You start half a kilometre out and press a button that moves
+   you a hundred and twenty metres closer, and the stop opens when the ordinary
+   check says you are inside the radius.
+
+   The earlier version had a "stand at stop 7" list. It fed a real position into
+   a real check, so the pass rule stayed honest, but one tap opened any gated
+   stop, and a control that opens a gated stop is a skip button whatever the
+   label says. It is gone.
+
+   It is also deliberately loud. A banner stays up the whole time a made-up
+   position is in use, because a quiet override eventually gets mistaken for a
+   working gate. */
+function currentGatedStop() {
+  const s = HUNT.stops[Math.min(STATE.current, HUNT.stops.length - 1)];
+  return s && s.gate ? s : null;
+}
+function simControls() {
+  const s = currentGatedStop();
+  const dev = document.createElement("div");
+  dev.className = "devrow";
+  if (!s) {
+    dev.innerHTML = `<span class="devlabel">Testing</span>
+      <div class="devnote">The stop you are on has no gate, so there is nothing
+      to walk towards. Open a gated stop and come back.</div>`;
+    return dev;
+  }
+  const away = SIM ? `${Math.round(haversineM(SIM.lat, SIM.lon, s.gate.lat, s.gate.lon))} m away`
+                   : "not simulating";
+  const acc = SIM ? SIM.acc : 20;
+  dev.innerHTML =
+    `<span class="devlabel">Testing · ${escapeHtml(s.title)}</span>
+     <button data-act="start">Start ${SIM_START_M} m away</button>
+     <button data-act="step"${SIM ? "" : " disabled"}>Walk ${SIM_STEP_M} m closer</button>
+     <span class="devdist">${away}</span>
+     <button data-act="acc" aria-pressed="${acc > ACC_USELESS_M}">Fix ${acc} m</button>
+     <button data-act="off"${SIM ? "" : " disabled"}>Back to the real GPS</button>
+     <div class="devnote">These move a made-up position through the real check.
+     Nothing here opens the stop, so you still have to get inside the radius.
+     The fix button swaps a good 20 m reading for a useless 100 m one.</div>`;
+  dev.querySelector('[data-act="start"]').onclick = () => { simStart(s); openMenu(); };
+  dev.querySelector('[data-act="step"]').onclick = () => { simStep(s); openMenu(); };
+  dev.querySelector('[data-act="acc"]').onclick = () => {
+    const next = acc > ACC_USELESS_M ? 20 : 100;
+    if (SIM) setSim({ ...SIM, acc: next });
+    else { simStart(s, next); }
+    openMenu();
+  };
+  dev.querySelector('[data-act="off"]').onclick = () => {
+    setSim(null); closeModal(); toast("Back to the real GPS.");
+  };
+  return dev;
+}
+function paintSimBanner() {
+  const b = $("simbanner");
+  if (!SIM) { b.hidden = true; return; }
+  b.hidden = false;
+  b.textContent = `Testing. Standing at a made-up position about `
+                + `${Math.round(SIM.dist)} m out, with a claimed accuracy of `
+                + `${SIM.acc} m. The gate rule is the real one and is not being bypassed.`;
+}
+function setSim(sim) {
+  SIM = sim;
+  if (sim) LS.set("sim", sim); else LS.del("sim");
+  renderWalk();
+}
+// Start the approach: drop the walker SIM_START_M short of the stop, due south,
+// there being no previous stop to come in from.
+function simStart(s, acc) {
+  const p = destPoint(s.gate.lat, s.gate.lon, 180, SIM_START_M);
+  setSim({ lat: p.lat, lon: p.lon, acc: acc || 20, dist: SIM_START_M });
+}
+// One press, one step closer. It cannot overshoot onto the stop itself: the
+// last stride stops short, so the gate is always what lets you in.
+function simStep(s) {
+  if (!SIM) return;
+  const d = haversineM(SIM.lat, SIM.lon, s.gate.lat, s.gate.lon);
+  const step = Math.min(SIM_STEP_M, Math.max(0, d - 5));
+  if (step <= 0) { toast("That is as close as this will take you."); return; }
+  const b = bearingDeg(SIM.lat, SIM.lon, s.gate.lat, s.gate.lon);
+  const p = destPoint(SIM.lat, SIM.lon, b, step);
+  setSim({ lat: p.lat, lon: p.lon, acc: SIM.acc,
+           dist: haversineM(p.lat, p.lon, s.gate.lat, s.gate.lon) });
+}
+
+/* ---- scrolling ---- */
+let lastFocused = null;
+function focusCurrent() {
+  const card = $("walk").lastElementChild;
+  if (!card) return;
+  const key = card.dataset.idx;
+  if (key === lastFocused) return;             // never fight somebody's own scroll
+  lastFocused = key;
+  requestAnimationFrame(() => {
+    const top = card.getBoundingClientRect().top + window.scrollY
+              - ($("topbar").offsetHeight + 10);
+    window.scrollTo({ top: Math.max(0, top), behavior: REDUCED ? "auto" : "smooth" });
+  });
+}
+
+/* ---- wiring ---- */
+$("menubtn").onclick = openMenu;
+$("modal").onclick = (ev) => { if (ev.target === $("modal")) closeModal(); };
+// Changing only the hash does not re-run this script, so the flag would appear
+// to do nothing. Reload so it is read again.
+window.addEventListener("hashchange", () => {
+  if ((location.hash === "#testing") !== TESTING) location.reload();
+});
+
+// Every picture in the hunt, fetched while there is still a wifi network and a
+// person standing still. After this screen the walk is outdoors, on one bar of
+// signal, and an image that has not arrived is a stop that cannot be read.
+function preloadImages() {
+  const srcs = new Set();
+  const walk = (blocks) => (blocks || []).forEach((b) => {
+    if (b.type === "image" && b.src) srcs.add(b.src);
+  });
+  walk(HUNT.intro); walk(HUNT.outro);
+  for (const s of HUNT.stops) {
+    walk(s.body); walk(s.after);
+    if (s.lens && s.lens.kind === "stencil" && s.lens.src) srcs.add(s.lens.src);
+  }
+  for (const src of srcs) { const im = new Image(); im.src = src; }
+}
+
+function beginWalk() {
+  LS.set("started", true);
+  $("s-intro").classList.remove("on");
+  $("s-walk").classList.add("on");
+  $("walktag").textContent = `${HUNT.stops.length} stops`;
+  renderWalk();
+}
+
+(() => {
+  if (!HUNT) {
+    $("introbody").textContent = "No hunt was baked into this page.";
+    $("startbtn").disabled = true;
+    return;
+  }
+  document.title = HUNT.title;
+  $("introtag").textContent = `${HUNT.stops.length} stops`;
+  const host = $("introbody");
+  for (const b of HUNT.intro || []) {
+    if (b.type === "image") { host.appendChild(imageFigure(b)); continue; }
+    const p = document.createElement("div");
+    p.className = "stext";
+    p.textContent = b.text;
+    host.appendChild(p);
+  }
+  preloadImages();
+
+  STATE = LS.get("state", null);
+  if (!STATE || typeof STATE.current !== "number") STATE = freshState();
+  // A made-up position must never outlive testing mode. Without this, somebody
+  // who once opened the page with ?testing=1 would carry a working bypass in
+  // local storage into a real walk, and the gates would be quietly off.
+  if (TESTING) SIM = LS.get("sim", null);
+  else { SIM = null; LS.del("sim"); }
+
+  $("startbtn").onclick = beginWalk;
+  if (LS.get("started", false)) beginWalk();
+})();
 </script>
 </body>
 </html>

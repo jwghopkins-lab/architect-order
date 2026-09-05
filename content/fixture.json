@@ -1,23 +1,166 @@
 {
   "id": "fixture",
   "title": "The Architect Order — fixture hunt",
+  "diary_mm": {"w": 148, "h": 210},
   "intro": [
-    {"type": "text", "text": "THIS IS A FIXTURE. Nothing here is real."}
+    {
+      "type": "text",
+      "text": "THIS IS THE FIXTURE HUNT. Every word of it is fake and none of it is part of the game.\n\nIt exists to prove the engine works: word-by-word text, pictures, location gates, a compass, a question with a limited number of guesses, and the three kinds of camera lens. The two gates are in Hyde Park, so they can be walked to and tested for real.\n\nThe pictures are placeholders drawn by the build, not photographs of anything."
+    }
   ],
   "outro": [
-    {"type": "text", "text": "End of the fixture."}
+    {
+      "type": "text",
+      "text": "End of the fixture.\n\nIf you got here having seen text arrive a word at a time, a picture between two paragraphs, two gates that would not open until you stood in the right place, a compass letter that vanished as you closed in, a question that ran out of guesses, and three lenses over the camera, then the engine is doing everything it was asked to do.\n\nA real hunt drops into content/ beside this one and changes one line of the workflow."
+    }
   ],
-  "diary_mm": {"w": 148, "h": 210},
   "stops": [
     {
-      "id": "placeholder",
-      "chapter": "Fixture",
-      "title": "Skeleton",
-      "body": [{"type": "text", "text": "The engine is being built."}],
+      "id": "fixture-arrow",
+      "chapter": "Fixture, part one",
+      "title": "Text, a picture, and an arrow",
+      "body": [
+        {
+          "type": "text",
+          "text": "FIXTURE. This stop has no gate and no question, so it is only here to prove that words arrive one at a time and that a picture can sit in the middle of them.\n\nBelow this paragraph there should be a placeholder photograph. It is not a photograph. Count the columns on it: something later asks."
+        },
+        {
+          "type": "image",
+          "src": "img/fixture-photo.jpg",
+          "alt": "A flat placeholder drawing of three columns under a grey sky, stamped FIXTURE.",
+          "caption": "Placeholder. Three columns, drawn by the build script."
+        },
+        {
+          "type": "text",
+          "text": "That was the picture. This paragraph is underneath it, which is the whole point: blocks render in the order they are written.\n\nThere is a Lens button below. It opens the camera with an arrow over the live view. Drag it with one finger, and pinch with two to make it bigger or turn it round."
+        },
+        {
+          "type": "image",
+          "src": "img/fixture-arrow.png",
+          "alt": "A thick red arrow pointing upwards, stamped FIXTURE.",
+          "caption": "The arrow the lens draws, shown here on the page first."
+        }
+      ],
       "gate": null,
       "question": null,
-      "after": [],
+      "after": [
+        {
+          "type": "text",
+          "text": "FIXTURE. Nothing was asked, so this pay-off arrived as soon as the words above ran out."
+        }
+      ],
+      "lens": {
+        "kind": "arrow",
+        "note": "FIXTURE. Point the arrow at anything at all. Nothing is being measured."
+      }
+    },
+    {
+      "id": "fixture-gate-compass",
+      "chapter": "Fixture, part two",
+      "title": "A gate, and a letter to walk on",
+      "body": [
+        {
+          "type": "text",
+          "text": "FIXTURE. This stop will not go on until the phone is within forty metres of Speakers' Corner, at the north-east corner of Hyde Park.\n\nThere is no way past it. There is no skip button, and there never will be.\n\nWhile you are more than five hundred metres out, and only while the phone actually knows where it is, a single compass letter appears under the button. Inside five hundred metres it disappears completely: not \"close\", not a distance, nothing."
+        }
+      ],
+      "gate": {
+        "lat": 51.5127,
+        "lon": -0.159,
+        "radius_m": 40,
+        "prompt": "FIXTURE. Stand near Speakers' Corner, Hyde Park, then tap the button."
+      },
+      "compass": true,
+      "question": null,
+      "after": [
+        {
+          "type": "text",
+          "text": "FIXTURE. The gate opened, so this text arrived. There was no question at this stop, so passing the gate was enough to resolve it."
+        }
+      ],
       "lens": null
+    },
+    {
+      "id": "fixture-question",
+      "chapter": "Fixture, part three",
+      "title": "Three guesses",
+      "body": [
+        {
+          "type": "text",
+          "text": "FIXTURE. No gate here, only a question, and three guesses to answer it with.\n\nThe answer is a number. It will be accepted as a word, as a digit, or in Roman numerals, and one letter out of place is forgiven. Get it wrong three times and the stop is marked wrong and tells you the answer, and the walk carries on regardless.\n\nThe placeholder photograph was at the first stop."
+        }
+      ],
+      "gate": null,
+      "question": {
+        "ask": "How many columns were drawn on the placeholder photograph?",
+        "answers": ["three", "3", "iii"],
+        "guesses": 3
+      },
+      "after": [
+        {
+          "type": "text",
+          "text": "FIXTURE. Three columns. Right or wrong, the walk goes on, and the ending counts up what happened."
+        }
+      ],
+      "lens": null
+    },
+    {
+      "id": "fixture-gate-question-stencil",
+      "chapter": "Fixture, part four",
+      "title": "A gate, a question, and a stencil",
+      "body": [
+        {
+          "type": "text",
+          "text": "FIXTURE. This stop has all three: a gate, a question, and a stencil to hold over the camera.\n\nThe gate is the Serpentine Bridge, in the middle of Hyde Park. Once it opens, the Lens button appears with the question, because the stencil is the thing you answer the question from.\n\nThe stencil is a pointed arch with a word cut clean through the middle of it. Hold it over anything and read the word through the hole."
+        }
+      ],
+      "gate": {
+        "lat": 51.5062,
+        "lon": -0.1731,
+        "radius_m": 40,
+        "prompt": "FIXTURE. Stand on or near the Serpentine Bridge, Hyde Park, then tap the button."
+      },
+      "compass": false,
+      "question": {
+        "ask": "Which word is cut through the middle of the stencil?",
+        "answers": ["fixture"],
+        "guesses": 3
+      },
+      "after": [
+        {
+          "type": "text",
+          "text": "FIXTURE. The Lens button stays on this stop's line after you move on, so a stencil can be picked up again later without walking back through the card."
+        }
+      ],
+      "lens": {
+        "kind": "stencil",
+        "src": "img/fixture-stencil.png",
+        "note": "FIXTURE. Drag with one finger, pinch with two to scale and turn. Fade it with the slider."
+      }
+    },
+    {
+      "id": "fixture-cord",
+      "chapter": "Fixture, part five",
+      "title": "A knotted cord",
+      "body": [
+        {
+          "type": "text",
+          "text": "FIXTURE. The last of the three lenses. A cord with knots on it, drawn between two handles you can drag apart.\n\nThe knots keep their proportions however far you stretch it, which is all you need to compare one length against another on a flat surface.\n\nThen there is the diary. Hold it flat against the same surface, tap Calibrate, tap one end of its long edge and then the other, and the cord stops stretching freely: it becomes exactly nine hundred and fourteen millimetres long, at that surface, at that distance. Move the phone and it is wrong, which is why the label says to calibrate again and why Reset throws it away."
+        }
+      ],
+      "gate": null,
+      "question": null,
+      "after": [
+        {
+          "type": "text",
+          "text": "FIXTURE. That is every feature the engine has. Next is the ending, which counts up the questions."
+        }
+      ],
+      "lens": {
+        "kind": "cord",
+        "marks_mm": [0, 300, 600, 914],
+        "note": "FIXTURE. Drag either end. Calibrate with the diary to lock it to real millimetres."
+      }
     }
   ]
 }
