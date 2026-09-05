@@ -145,8 +145,7 @@
   .gatedone { margin-top: 14px; font-size: .82rem; color: var(--good);
               font-weight: 600; text-align: center; }
   .gatedone .btn { margin-top: 10px; }
-  .matchwait { margin-top: 12px; font-size: .82rem; color: var(--ink-soft);
-               text-align: center; line-height: 1.45; }
+  .camrow { margin-top: 14px; }
   /* The tick. iOS Safari has no vibration API, and it ticks a native switch
      control only when a finger lands on the switch itself: toggled from
      script, by its label or by its own click(), it stays silent. So every
@@ -871,21 +870,27 @@ function afterBody(card, i, runs, live) {
   if (s.gate && !STATE.cont[s.id]) { card.appendChild(gateDone(i)); return; }
   if (s.gate) card.appendChild(gateDone(i));
   afterGate(card, i, runs);
-  // No gate: the lens opens when the body reveal finishes, the first time the
-  // stop is read. A reload later shows the Lens button and waits.
-  if (!s.gate && live && autoLens(s)) openLens(s);
 }
 
 function afterGate(card, i, runs) {
   const s = HUNT.stops[i];
-  if (s.lens) card.appendChild(lensRow(s));
+  // The camera always opens from a tap: iOS refuses it otherwise, and the fix
+  // window and a reveal timer are not taps. So an auto lens never opens by
+  // itself. At the moment it would have, a lit button opens it; after a gate
+  // that button is Continue, which opens the lens directly; with no gate it
+  // is this one, lit when the body finishes, a triple tap included.
   if (matchPending(s)) {
-    const wait = document.createElement("div");
-    wait.className = "matchwait";
-    wait.textContent = "Line the stencil up and tap Progress in the lens to go on.";
-    card.appendChild(wait);
+    const row = document.createElement("div");
+    row.className = "camrow";
+    const btn = document.createElement("button");
+    btn.className = "btn primary";
+    btn.textContent = "Open the camera";
+    btn.onclick = () => openLens(s);
+    row.appendChild(btn);
+    card.appendChild(row);
     return;
   }
+  if (s.lens) card.appendChild(lensRow(s));
   if (s.question && !stopResult(s)) { card.appendChild(questionSection(i)); return; }
   if (s.question) card.appendChild(verdictLine(s));
   afterResolved(card, i, runs);
@@ -908,7 +913,7 @@ function nextRow(i) {
   row.className = "srow";
   const btn = document.createElement("button");
   btn.className = "btn primary";
-  btn.textContent = i === HUNT.stops.length - 1 ? "Finish" : "Next";
+  btn.textContent = "Next";        // the outro is the next thing, even after the last stop
   btn.onclick = () => {
     STATE.current = Math.max(STATE.current, i + 1);
     saveState();
@@ -935,8 +940,10 @@ function openLens(s) {
     getAccuracy: () => (lastFix && lastFix.accuracy != null ? lastFix.accuracy : null),
     logLine,
     // Progress was tapped: the lens has closed and ticked, the stop goes on.
+    // With no gate to approach, this is where a name resolves.
     onProgress: () => {
       STATE.matched[s.id] = true;
+      if (!s.gate) reveal(s);
       saveState();
       renderWalk();
     },

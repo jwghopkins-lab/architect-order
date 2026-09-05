@@ -41,6 +41,31 @@
         {"type": "text",
          "text": "It is said that the fire was started by the Clerk of Works burning two cartloads of old willow tally sticks in stoves meant for coal, but this is not true. The fire was set deliberately, and something else was lost that night that is not documented."}
       ]
+    },
+    {
+      "id": "second",
+      "chapter": "Location two",
+      "reveal": {"chapter": "Westminster Abbey"},
+      "body": [
+        {"type": "text",
+         "text": "The only public copy of Sir Isaac Newton's private notes on the Great Pyramid and the sacred cubit."},
+        {"type": "text",
+         "text": "Arthur's recovered notes contain Newton's private working papers from the 1680s, cross-referencing John Greaves's Pyramidographia. Rather than mystical prophecies, they show a rigorous, obsessive attempt to reverse-engineer the ancient Egyptian Memphis cubit and the Jewish sacred cubit using raw architectural dimensions. The missing folios detail calculations converting pyramid chamber heights into English inches, hunting for a mathematical link between ancient temple layouts and contemporary mint standards."},
+        {"type": "text",
+         "text": "Newton is buried here, in the Abbey, a few hundred yards from where you stand. He lies in the nave against the choir screen. His monument was unveiled in 1731. He reclines beneath a globe of the heavens, and the globe rests on a pyramid. On the carving below him, boys handle a telescope and a prism, and one of them weighs the sun and the planets on a steelyard. The men who buried him put a pyramid and a balance on his tomb."},
+        {"type": "text",
+         "text": "He lay in state in the Jerusalem Chamber, at the west end, before they carried him in. The two towers above it were finished eighteen years after he was buried. He never saw them. Go round to the west front, and look up."}
+      ],
+      "gate": null,
+      "question": null,
+      "lens": {
+        "kind": "stencil",
+        "src": "img/abbey-west-front-stencil.png",
+        "note": "Line the drawing up with the front of the Abbey.",
+        "auto": true,
+        "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": null}
+      },
+      "after": []
     }
   ]
 }

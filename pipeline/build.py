@@ -214,8 +214,11 @@ def validate(hunt):
         if s.get("distance") and not gate:
             fail(where, "distance is on but there is no gate to measure to")
         if s.get("reveal") is not None:
-            if not gate:
-                fail(where, "reveal needs a gate: there is nothing to approach")
+            # A name resolves on the approach to a gate, or, with no gate, on
+            # Progress in a match. It needs one or the other to happen on.
+            lens = s.get("lens") or {}
+            if not gate and not (lens.get("kind") == "stencil" and lens.get("match") is not None):
+                fail(where, "reveal needs a gate to approach or a match to press Progress on")
             check_reveal(s["reveal"], where)
         if s.get("question"):
             check_question(s["question"], where)

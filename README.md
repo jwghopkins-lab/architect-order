@@ -59,8 +59,13 @@ player still lines the stencil up by hand; the code only checks the alignment.
       "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": null}
     }
 
-`auto` opens the lens by itself once the stop's gate has been passed and
-Continue tapped, or when the body finishes revealing if there is no gate.
+`auto` means the lens is a step in the stop rather than a tool beside it,
+but the camera always opens from a tap: iOS refuses it otherwise, and a fix
+window or a timer is not a tap. So at the moment the lens would have opened,
+a lit button opens it. After a gate that button is Continue, which opens the
+lens directly; with no gate it is **Open the camera**, lit when the body
+finishes revealing, a triple tap included. The same button reopens the lens
+if it was closed before Progress.
 `threshold` is the score that counts as matched, `hold_ms` how long it must
 stay there, `gate` whether Progress waits for it, and `fallback_s` how many
 seconds of trying light Progress anyway (null: never). The Log button in the
@@ -84,6 +89,8 @@ on the phone. The preview is documentation and is not shipped to the player.
 
 ![The Jewel Tower stencil over its reference photo](app/img/jewel-tower-stencil-preview.jpg)
 
+![The Abbey west front stencil over its reference photo](app/img/abbey-west-front-stencil-preview.jpg)
+
 ## Test mode, the live distance, and a name that resolves
 
 - **`"test_mode": true`** at the top of a hunt turns on every player-facing
@@ -105,7 +112,9 @@ on the phone. The preview is documentation and is not shipped to the player.
   gate keeps the stop's written chapter and title until a usable fix reads
   within `at_m`, then changes them, once, for good. Passing the gate reveals
   it too. `at_m` defaults to 500, where the compass drops out; `0` means only
-  on the pass. At least one of `chapter` or `title` is required.
+  on the pass. On a stop with no gate, a `reveal` applies when Progress is
+  pressed on the stop's match. At least one of `chapter` or `title` is
+  required.
 - A stop's **`title` is optional**; the card shows the chapter as its header
   and a title only if there is one. Nothing on a card or the opening counts
   the stops. A `gate.prompt` is accepted and not shown.
