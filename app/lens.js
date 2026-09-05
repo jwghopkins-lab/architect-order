@@ -1,28 +1,44 @@
 /* The lens: the phone's camera with a picture laid over the live view, which
    the player lines up against something real by hand.
 
-   No dependencies, no library, and above all no computer vision. Nothing here
-   detects anything, nothing snaps to anything and nothing is measured for you.
-   The overlay is a shape on top of a video, and every last pixel of where it
-   sits was put there by somebody's thumb. That is the game: the phone holds the
-   picture still and the player does the looking.
+   No dependencies, no library, and no computer vision that does anything for
+   the player. Nothing here detects anything, nothing snaps to anything and
+   nothing is measured for you. The overlay is a shape on top of a video, and
+   every last pixel of where it sits was put there by somebody's thumb. That is
+   the game: the phone holds the picture still and the player does the looking.
 
-   window.Lens.open(lens, diary_mm) where lens is the stop's lens object and
-   diary_mm is the physical size of the paper diary, used by the scale bar. */
+   The one thing the code does look at is how well the shape under a stencil
+   agrees with it, as a number the player can watch while they line it up. It
+   checks the alignment; it never makes it.
+
+   window.Lens.open(lens, diary_mm, opts) where lens is the stop's lens object,
+   diary_mm is the physical size of the paper diary, used by the scale bar, and
+   opts carries what a match lens needs from the player:
+     stopId       for the log
+     getAccuracy  () => the last GPS accuracy in metres, or null
+     logLine      (fields) => void, appends one calibration sample
+     onProgress   () => void, called inside the Progress tap after the close */
 (function () {
   "use strict";
 
   const NS = "http://www.w3.org/2000/svg";
-  const MIN_OPACITY = 0.3;
+  const MATCH_EVERY_MS = 250;
+  const MATCH_ALPHA = 0.3;          // exponential smoothing of the score
+  const MATCH_SHIFTS = [-4, 0, 4];  // working-resolution pixels
+  const MATCH_SCALES = [0.96, 1, 1.04];
+  const WORK_PX = 320;              // longest side of the working frame
+  const WORK_PX_SLOW = 240;         // and where it drops to if a phone cannot keep up
+  const SLOW_MS = 10;
 
   let root = null;        // the full-screen container, built once and reused
   let stream = null;      // the live camera tracks, so they can all be stopped
-  let cfg = null;         // { lens, diary }
+  let cfg = null;         // { lens, diary, opts }
   let view = null;        // { x, y, scale, rot } placement of the whole overlay
   let cord = null;        // { a: {x,y}, b: {x,y} } the two cord ends, in pixels
   let mmPerPx = null;     // set by Calibrate with the diary, cleared by Reset
   const pointers = new Map();
   let pinch = null;
+  let match = null;       // the live match state while a match lens is open
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -35,6 +51,7 @@
     for (const k in attrs) n.setAttribute(k, attrs[k]);
     return n;
   }
+  function haptic() { if (typeof window.haptic === "function") window.haptic(); }
 
   /* ---- styles, injected once so the player stays one file of markup ---- */
   function injectStyle() {
@@ -55,7 +72,7 @@
     #lenshit { position: absolute; inset: 0; }
     #lensbars { position: absolute; left: 0; right: 0; bottom: 0;
                 padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
-                background: linear-gradient(to top, rgba(0,0,0,.72), rgba(0,0,0,0));
+                background: linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,0));
                 display: flex; flex-direction: column; gap: 9px; }
     #lenstop { position: absolute; left: 0; right: 0; top: 0;
                padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
@@ -88,6 +105,28 @@
     .cordend { fill: #fff; stroke: #000; stroke-width: 2; }
     .cordline { stroke: #fff; stroke-width: 3; }
     .cordknot { fill: #fff; stroke: #000; stroke-width: 1.5; }
+
+    /* The match panel. Not a testing feature: it is on for every lens with a
+       match, because calibrating in the field is the point. */
+    #lensmatch { display: flex; flex-direction: column; gap: 7px;
+                 padding: 8px 10px; border-radius: 12px; background: rgba(0,0,0,.5); }
+    #matchbar { position: relative; height: 10px; border-radius: 999px;
+                background: rgba(255,255,255,.18); overflow: hidden; }
+    #matchfill { height: 100%; width: 0; border-radius: 999px; background: #fff;
+                 transition: width .2s linear; }
+    #matchfill.over { background: #3FBF7F; }
+    #matchtick { position: absolute; top: -2px; bottom: -2px; width: 2px;
+                 background: #FFD166; }
+    #matchnums { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                 font-size: .72rem; opacity: .92; font-variant-numeric: tabular-nums; }
+    #matchgo { flex: 2; background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.25); }
+    #matchgo:disabled { opacity: .45; }
+    #matchgo.lit { background: #fff; color: #000; opacity: 1; }
+    #matchgo.matched { background: #3FBF7F; color: #04140B; border-color: #3FBF7F; }
+    #matchlog { flex: 1; }
+    #matchtried { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                  font-size: .74rem; min-width: 3.2em; text-align: right;
+                  opacity: .85; font-variant-numeric: tabular-nums; }
     `;
     document.head.appendChild(s);
   }
@@ -108,6 +147,15 @@
         <button class="lensx" id="lensclose" aria-label="Close the lens">✕</button>
       </div>
       <div id="lensbars">
+        <div id="lensmatch" hidden>
+          <div id="matchbar"><div id="matchfill"></div><div id="matchtick"></div></div>
+          <div id="matchnums">score 0.00 · on 0.00 · off 0.00</div>
+          <div class="lensrowb">
+            <button class="lensb" id="matchlog">Log</button>
+            <button class="lensb" id="matchgo" disabled>Progress</button>
+            <span id="matchtried"></span>
+          </div>
+        </div>
         <div id="lensscale"></div>
         <div class="lensrowb">
           <span class="lensoplab">Fade</span>
@@ -132,15 +180,24 @@
       root.querySelector("#lensfeed").hidden = true;
       note("Working from the photo you chose. Everything else is the same.");
     };
+    root.querySelector("#matchlog").onclick = logSample;
+    // The tick has to happen inside the tap, before anything else. Closing
+    // and continuing come after it in the same handler, never after an await.
+    root.querySelector("#matchgo").onclick = () => {
+      haptic();
+      const done = cfg.opts.onProgress;
+      close();
+      if (done) done();
+    };
     attachGestures();
   }
 
   function note(text) { root.querySelector("#lensnote").textContent = text; }
 
   /* ---- opening and closing ---- */
-  async function open(lens, diary) {
+  async function open(lens, diary, opts) {
     if (!root) build();
-    cfg = { lens, diary: diary || { w: 148, h: 210 } };
+    cfg = { lens, diary: diary || { w: 148, h: 210 }, opts: opts || {} };
     mmPerPx = null;
     root.classList.add("on");
     root.querySelector("#lensop").value = 100;
@@ -150,6 +207,7 @@
     buildOverlay();
     buildActions();
     paintScale();
+    startMatch();
     await startCamera();
   }
 
@@ -168,6 +226,9 @@
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } }, audio: false });
       video.srcObject = stream;
+      video.hidden = false;
+      root.querySelector("#lensshot").hidden = true;
+      clearFallback();
     } catch (err) {
       fallback(err && err.name === "NotAllowedError"
         ? "The camera was refused. You can use a photo instead."
@@ -176,16 +237,26 @@
   }
   // Refusing the camera must not end the lens. The same overlay over a still
   // photo is the same tool, one frame at a time, and it is the only thing that
-  // works on a laptop or behind a locked-down browser.
+  // works on a laptop or behind a locked-down browser. A lens that opened by
+  // itself may also have asked outside a tap, which some browsers refuse, so
+  // there is a button to ask again from inside one.
   function fallback(why) {
     note(why);
-    const pick = root.querySelector("#lenspick");
-    const b = el("button", "lensb", "Choose a photo");
-    b.onclick = () => pick.click();
-    root.querySelector("#lensactions").prepend(b);
+    clearFallback();
+    const row = root.querySelector("#lensactions");
+    const again = el("button", "lensb fallbackb", "Try the camera");
+    again.onclick = () => startCamera();
+    const pick = el("button", "lensb fallbackb", "Choose a photo");
+    pick.onclick = () => root.querySelector("#lenspick").click();
+    row.prepend(pick);
+    row.prepend(again);
+  }
+  function clearFallback() {
+    for (const b of root.querySelectorAll(".fallbackb")) b.remove();
   }
 
   function close() {
+    stopMatch();
     if (stream) { for (const t of stream.getTracks()) t.stop(); stream = null; }
     const video = root.querySelector("#lensfeed");
     video.srcObject = null;
@@ -204,6 +275,8 @@
     const over = root.querySelector("#lensover");
     over.innerHTML = "";
     over.style.opacity = 1;
+    over.style.marginLeft = "0px";
+    over.style.marginTop = "0px";
     const size = shortEdge() * 0.6;
     view = { x: window.innerWidth / 2, y: window.innerHeight / 2, scale: 1, rot: 0 };
 
@@ -214,6 +287,7 @@
       img.style.width = size + "px";
       over.appendChild(img);
       img.onload = () => { centreOn(over); };
+      if (img.complete && img.naturalWidth) centreOn(over);
     } else if (cfg.lens.kind === "arrow") {
       over.appendChild(arrowSvg(size));
       centreOn(over);
@@ -467,6 +541,315 @@
     layer.addEventListener("pointerdown", onTap);
   }
 
+  /* ---- the match ----
+     How well the shape under the stencil agrees with it, as a number, several
+     times a second. Edges in the frame are compared under the stencil's lines
+     against a ring just beside them: if the edges are no more likely under the
+     stencil than next to it, the score is zero; if every edge nearby is under
+     it, one. A small search around the player's placement forgives an
+     imperfect hand. The number is smoothed, shown, logged and tested, and it
+     never moves the stencil: alignment stays the player's job. */
+  function startMatch() {
+    stopMatch();
+    const m = cfg.lens.kind === "stencil" ? cfg.lens.match : null;
+    const panel = root.querySelector("#lensmatch");
+    if (!m) { panel.hidden = true; return; }
+    panel.hidden = false;
+    match = {
+      m, opened: performance.now(), smooth: null, on: 0, off: 0, best: 0,
+      above: null, matched: false, workPx: WORK_PX, slow: [],
+      frame: document.createElement("canvas"), stencil: document.createElement("canvas"),
+      masks: null, maskKey: "",
+      timer: null,
+    };
+    root.querySelector("#matchtick").style.left = (m.threshold * 100) + "%";
+    paintMatch();
+    match.timer = setInterval(matchTick, MATCH_EVERY_MS);
+  }
+  function stopMatch() {
+    if (match && match.timer) clearInterval(match.timer);
+    match = null;
+  }
+
+  // The size of the working frame follows the screen's aspect, because the
+  // overlay is placed in screen pixels over a feed that is cropped to the
+  // screen. Scoring against the raw camera frame would put the stencil
+  // somewhere else in the picture than where the player sees it.
+  function workSize() {
+    const W = window.innerWidth, H = window.innerHeight;
+    const k = match.workPx / Math.max(W, H);
+    return { w: Math.max(8, Math.round(W * k)), h: Math.max(8, Math.round(H * k)), k };
+  }
+
+  function currentSource() {
+    const video = root.querySelector("#lensfeed");
+    const shot = root.querySelector("#lensshot");
+    if (!video.hidden && video.videoWidth > 0) {
+      return { src: video, w: video.videoWidth, h: video.videoHeight };
+    }
+    if (!shot.hidden && shot.naturalWidth > 0) {
+      return { src: shot, w: shot.naturalWidth, h: shot.naturalHeight };
+    }
+    return null;
+  }
+
+  function matchTick() {
+    if (!match) return;
+    const t0 = performance.now();
+    const img = root.querySelector("#lensover img");
+    const src = currentSource();
+    if (!img || !img.naturalWidth || !src) { paintMatch(); return; }
+
+    const { w, h, k } = workSize();
+    const E = edgeMap(src, w, h);
+    const masks = stencilMasks(img, w, h, k);
+
+    let best = { score: 0, on: 0, off: 0 };
+    for (const mk of masks) {
+      for (const dy of MATCH_SHIFTS) for (const dx of MATCH_SHIFTS) {
+        const on = meanAt(E, mk.M, w, h, dx, dy);
+        const off = meanAt(E, mk.R, w, h, dx, dy);
+        const score = Math.max(0, (on - off) / (on + off + 0.001));
+        if (score > best.score) best = { score, on, off };
+      }
+    }
+    match.best = best.score;
+    match.on = best.on; match.off = best.off;
+    match.smooth = match.smooth == null ? best.score
+                 : MATCH_ALPHA * best.score + (1 - MATCH_ALPHA) * match.smooth;
+
+    // Matched is a state, not an event. Fall below the line and it is gone.
+    const now = performance.now();
+    if (match.smooth >= match.m.threshold) {
+      if (match.above == null) match.above = now;
+      match.matched = now - match.above >= match.m.hold_ms;
+    } else {
+      match.above = null;
+      match.matched = false;
+    }
+
+    // Keep each evaluation cheap. A phone that cannot manage it at 320 px
+    // drops to 240 px and stays there for the rest of the lens. Only the
+    // steady ticks count: the one after a drag or a pinch also rebuilds the
+    // masks, and that cost is the thumb's, not the frame's.
+    const took = now - t0;
+    match.ms = took;
+    if (!match.rebuilt) {
+      match.slow.push(took);
+      if (match.slow.length > 6) match.slow.shift();
+      if (match.workPx === WORK_PX && match.slow.length >= 4
+          && match.slow.reduce((a, b) => a + b, 0) / match.slow.length > SLOW_MS) {
+        match.workPx = WORK_PX_SLOW;
+        match.maskKey = "";
+      }
+    }
+    paintMatch();
+  }
+
+  // Grayscale, a 3×3 box blur, a 3×3 Sobel, and the magnitude scaled so that
+  // the frame's 99th percentile is one. That last step is what stops the score
+  // swinging with the light: a dim wall and a bright one give the same map.
+  function edgeMap(src, w, h) {
+    const c = match.frame;
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    // object-fit: cover, by hand, so the working frame is the screen's crop.
+    const kk = Math.max(window.innerWidth / src.w, window.innerHeight / src.h);
+    const cw = window.innerWidth / kk, ch = window.innerHeight / kk;
+    ctx.drawImage(src.src, (src.w - cw) / 2, (src.h - ch) / 2, cw, ch, 0, 0, w, h);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    const n = w * h;
+    const g = new Float32Array(n);
+    for (let i = 0, j = 0; i < n; i++, j += 4) {
+      g[i] = 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2];
+    }
+    const b = new Float32Array(n);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x;
+        b[i] = (g[i - w - 1] + g[i - w] + g[i - w + 1]
+              + g[i - 1] + g[i] + g[i + 1]
+              + g[i + w - 1] + g[i + w] + g[i + w + 1]) / 9;
+      }
+    }
+    const mag = new Float32Array(n);
+    const hist = new Uint32Array(256);
+    const MAXMAG = 1443;                      // sqrt(2) × 4 × 255, the Sobel ceiling
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x;
+        const gx = -b[i - w - 1] + b[i - w + 1] - 2 * b[i - 1] + 2 * b[i + 1]
+                   - b[i + w - 1] + b[i + w + 1];
+        const gy = -b[i - w - 1] - 2 * b[i - w] - b[i - w + 1]
+                   + b[i + w - 1] + 2 * b[i + w] + b[i + w + 1];
+        const mg = Math.sqrt(gx * gx + gy * gy);
+        mag[i] = mg;
+        hist[Math.min(255, (mg * 255 / MAXMAG) | 0)]++;
+      }
+    }
+    const want = n * 0.99;
+    let seen = 0, bin = 0;
+    for (; bin < 256; bin++) { seen += hist[bin]; if (seen >= want) break; }
+    const p99 = Math.max(1e-6, (bin + 1) * MAXMAG / 255);
+    for (let i = 0; i < n; i++) mag[i] = Math.min(1, mag[i] / p99);
+    return mag;
+  }
+
+  // The stencil's alpha under the player's placement, at three scales, each
+  // thresholded, thickened by two pixels into the mask M, then thickened by
+  // six more and hollowed out into the ring R. Cached against the placement:
+  // while the phone and the thumb hold still, only the frame is recomputed.
+  //
+  // The threshold and the first thickening happen at the stencil's own
+  // resolution, not the working frame's. A 3 px line on a 600 px stencil is
+  // under half a pixel once the stencil is 90 px wide, and thresholding that
+  // after the shrink leaves nothing: the line's alpha never reaches 128. So
+  // the PNG's own pixels are thresholded, where it is exact, thickened by the
+  // native equivalent of two working pixels, and only then drawn small.
+  function stencilMasks(img, w, h, k) {
+    const key = [w, h, view.x, view.y, view.scale, view.rot, img.width].join(",");
+    match.rebuilt = !(match.masks && match.maskKey === key);
+    if (!match.rebuilt) return match.masks;
+    const c = match.stencil;
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    // Layout size, not the bounding box: once the stencil is turned, the box
+    // is the box around the turned shape and is wider than the shape itself.
+    const elW = img.offsetWidth;
+    const elH = img.offsetHeight || elW * img.naturalHeight / img.naturalWidth;
+    const out = [];
+    for (const sc of MATCH_SCALES) {
+      const perNative = elW * view.scale * sc * k / img.naturalWidth;   // working px per stencil px
+      const thick = nativeMask(img, Math.max(1, Math.ceil(2 / perNative)));
+      ctx.clearRect(0, 0, w, h);
+      ctx.save();
+      ctx.translate(view.x * k, view.y * k);
+      ctx.rotate(view.rot * Math.PI / 180);
+      ctx.scale(view.scale * sc * k, view.scale * sc * k);
+      ctx.drawImage(thick, -elW / 2, -elH / 2, elW, elH);
+      ctx.restore();
+      const a = ctx.getImageData(0, 0, w, h).data;
+      const n = w * h;
+      const M = new Uint8Array(n);
+      for (let i = 0, j = 3; i < n; i++, j += 4) M[i] = a[j] >= 128 ? 1 : 0;
+      const D = dilate(M, w, h, 6);
+      const Mi = [], Ri = [];
+      for (let i = 0; i < n; i++) {
+        if (M[i]) Mi.push(i);
+        else if (D[i]) Ri.push(i);
+      }
+      out.push({ M: Int32Array.from(Mi), R: Int32Array.from(Ri) });
+    }
+    match.masks = out;
+    match.maskKey = key;
+    return out;
+  }
+
+  // The stencil's alpha at its own size, thresholded at 128 and thickened by
+  // r pixels, as an opaque white shape on nothing that drawImage can shrink.
+  // Cached by radius: a drag does not change it, only a pinch does.
+  function nativeMask(img, r) {
+    if (!match.native) match.native = new Map();
+    const key = img.src + "|" + r;
+    if (match.native.has(key)) return match.native.get(key);
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    const c = document.createElement("canvas");
+    c.width = nw; c.height = nh;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const a = ctx.getImageData(0, 0, nw, nh).data;
+    const n = nw * nh;
+    const bin = new Uint8Array(n);
+    for (let i = 0, j = 3; i < n; i++, j += 4) bin[i] = a[j] >= 128 ? 1 : 0;
+    const thick = dilate(bin, nw, nh, r);
+    const out = ctx.createImageData(nw, nh);
+    for (let i = 0, j = 0; i < n; i++, j += 4) {
+      if (thick[i]) { out.data[j] = out.data[j + 1] = out.data[j + 2] = out.data[j + 3] = 255; }
+    }
+    ctx.putImageData(out, 0, 0);
+    match.native.set(key, c);
+    return c;
+  }
+
+  // A square dilation as two one-dimensional passes, stamping runs out from
+  // each set pixel. Cheap because a stencil is thin lines on nothing.
+  function dilate(src, w, h, r) {
+    const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        if (!src[row + x]) continue;
+        tmp.fill(1, row + Math.max(0, x - r), row + Math.min(w - 1, x + r) + 1);
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        if (!tmp[row + x]) continue;
+        const a = Math.max(0, y - r), b = Math.min(h - 1, y + r);
+        for (let yy = a; yy <= b; yy++) out[yy * w + x] = 1;
+      }
+    }
+    return out;
+  }
+
+  // Mean of E over a set of pixel indices, with the set shifted by (dx, dy).
+  // Shifting the sample instead of redrawing the stencil is what makes the
+  // twenty-seven evaluations affordable.
+  function meanAt(E, idx, w, h, dx, dy) {
+    let sum = 0, cnt = 0;
+    const n = w * h, off = dy * w + dx;
+    for (let t = 0; t < idx.length; t++) {
+      const i = idx[t];
+      const x = i % w + dx;
+      if (x < 0 || x >= w) continue;
+      const j = i + off;
+      if (j < 0 || j >= n) continue;
+      sum += E[j]; cnt++;
+    }
+    return cnt ? sum / cnt : 0;
+  }
+
+  function paintMatch() {
+    if (!match) return;
+    const m = match.m;
+    const s = match.smooth == null ? 0 : match.smooth;
+    const fill = root.querySelector("#matchfill");
+    fill.style.width = (s * 100) + "%";
+    fill.classList.toggle("over", s >= m.threshold);
+    root.querySelector("#matchnums").textContent =
+      `score ${s.toFixed(2)} · on ${match.on.toFixed(2)} · off ${match.off.toFixed(2)}`;
+
+    const tried = (performance.now() - match.opened) / 1000;
+    const gated = m.gate !== false;
+    const fellBack = gated && m.fallback_s != null && tried >= m.fallback_s;
+    const go = root.querySelector("#matchgo");
+    const open = match.matched || !gated || fellBack;
+    go.disabled = !open;
+    go.classList.toggle("lit", open);
+    go.classList.toggle("matched", match.matched);
+    root.querySelector("#matchtried").textContent = gated ? `${Math.floor(tried)} s` : "";
+  }
+
+  // One calibration sample. The owner presses this at good and bad alignments
+  // on real walls, then copies the lot out of the menu.
+  function logSample() {
+    if (!match || !cfg.opts.logLine) return;
+    const acc = cfg.opts.getAccuracy ? cfg.opts.getAccuracy() : null;
+    cfg.opts.logLine({
+      stop: cfg.opts.stopId || "",
+      time: new Date().toISOString(),
+      score: match.smooth == null ? 0 : match.smooth,
+      on: match.on, off: match.off,
+      x: view.x, y: view.y, scale: view.scale, rot: view.rot,
+      matched: match.matched,
+      acc: acc == null ? null : acc,
+    });
+    const b = root.querySelector("#matchlog");
+    b.textContent = "Logged";
+    setTimeout(() => { b.textContent = "Log"; }, 700);
+  }
+
   /* ---- capture ---- */
   async function capture() {
     const video = root.querySelector("#lensfeed");
@@ -517,29 +900,30 @@
     if (cfg.lens.kind === "cord") return drawSvg(ctx, over.querySelector("svg"));
     const node = over.firstElementChild;
     if (!node) return Promise.resolve();
-    const r = node.getBoundingClientRect();
-    ctx.save();
-    ctx.translate(view.x, view.y);
-    ctx.rotate(view.rot * Math.PI / 180);
-    ctx.scale(view.scale, view.scale);
-    const w = r.width / view.scale, h = r.height / view.scale;
+    // Layout size, not the bounding box, for the same reason as the mask: a
+    // turned shape's box is bigger than the shape.
+    const w = node.tagName === "IMG" ? node.offsetWidth : parseFloat(node.getAttribute("width"));
+    const h = node.tagName === "IMG" ? node.offsetHeight : parseFloat(node.getAttribute("height"));
     if (node.tagName === "IMG") {
+      ctx.save();
+      ctx.translate(view.x, view.y);
+      ctx.rotate(view.rot * Math.PI / 180);
+      ctx.scale(view.scale, view.scale);
       ctx.drawImage(node, -w / 2, -h / 2, w, h);
       ctx.restore();
       return Promise.resolve();
     }
-    ctx.restore();
-    return drawSvg(ctx, node, view);
+    return drawSvg(ctx, node, view, w, h);
   }
 
   // An SVG is drawn by serialising it into an image. It has to be given an
   // explicit size or Safari draws nothing at all and reports no error.
-  function drawSvg(ctx, svg, placement) {
+  function drawSvg(ctx, svg, placement, w, h) {
     if (!svg) return Promise.resolve();
     const clone = svg.cloneNode(true);
-    const r = svg.getBoundingClientRect();
-    clone.setAttribute("width", Math.max(1, Math.round(r.width)));
-    clone.setAttribute("height", Math.max(1, Math.round(r.height)));
+    if (w == null) { const r = svg.getBoundingClientRect(); w = r.width; h = r.height; }
+    clone.setAttribute("width", Math.max(1, Math.round(w)));
+    clone.setAttribute("height", Math.max(1, Math.round(h)));
     const blob = new Blob([new XMLSerializer().serializeToString(clone)],
                           { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
@@ -551,12 +935,10 @@
           ctx.translate(placement.x, placement.y);
           ctx.rotate(placement.rot * Math.PI / 180);
           ctx.scale(placement.scale, placement.scale);
-          ctx.drawImage(im, -r.width / (2 * placement.scale),
-                            -r.height / (2 * placement.scale),
-                            r.width / placement.scale, r.height / placement.scale);
+          ctx.drawImage(im, -w / 2, -h / 2, w, h);
           ctx.restore();
         } else {
-          ctx.drawImage(im, 0, 0, r.width, r.height);
+          ctx.drawImage(im, 0, 0, w, h);
         }
         URL.revokeObjectURL(url);
         resolve();
@@ -566,5 +948,13 @@
     });
   }
 
-  window.Lens = { open, close };
+  // How the match is doing on this phone: the last evaluation's cost and the
+  // working size it settled on. Read-only, for checking the 10 ms budget.
+  function stats() {
+    return match ? { ms: match.ms == null ? null : Math.round(match.ms * 100) / 100,
+                     workPx: match.workPx, score: match.smooth, matched: match.matched }
+                 : null;
+  }
+
+  window.Lens = { open, close, stats };
 })();

@@ -90,6 +90,30 @@ def check_question(q, where):
     q["guesses"] = guesses
 
 
+def is_num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def check_match(m, where):
+    """The live match on a stencil lens. Defaults are filled in here so the
+    player never has to guess them, and the JSON that reaches the page says
+    exactly what it is going to do."""
+    if not isinstance(m, dict):
+        fail(where, "match must be an object")
+    threshold = m.setdefault("threshold", 0.35)
+    if not is_num(threshold) or not 0 < threshold <= 1:
+        fail(where, f"match threshold is {threshold!r}, must be more than 0 and at most 1")
+    hold = m.setdefault("hold_ms", 600)
+    if not is_num(hold) or hold < 0:
+        fail(where, f"match hold_ms is {hold!r}, must be 0 or more")
+    gate = m.setdefault("gate", True)
+    if not isinstance(gate, bool):
+        fail(where, f"match gate is {gate!r}, must be true or false")
+    fallback = m.setdefault("fallback_s", None)
+    if fallback is not None and (not is_num(fallback) or fallback < 10):
+        fail(where, f"match fallback_s is {fallback!r}, must be null or 10 or more")
+
+
 def check_lens(lens, where, images):
     kind = lens.get("kind")
     if kind not in LENS_KINDS:
@@ -101,6 +125,17 @@ def check_lens(lens, where, images):
         if not (APP / src).is_file():
             fail(where, f"stencil image {src!r} is not under app/")
         images.append(src)
+        if lens.get("match") is not None:
+            check_match(lens["match"], where)
+        # auto opens the lens unprompted. It only makes sense with something
+        # to wait for, so it follows match unless the content says otherwise.
+        auto = lens.setdefault("auto", lens.get("match") is not None)
+        if not isinstance(auto, bool):
+            fail(where, f"lens auto is {auto!r}, must be true or false")
+    else:
+        for field in ("match", "auto"):
+            if lens.get(field) is not None:
+                fail(where, f"{field} is only for a stencil lens, not {kind}")
     if kind == "cord":
         marks = lens.get("marks_mm")
         if not isinstance(marks, list) or len(marks) < 2:

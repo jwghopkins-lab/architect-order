@@ -5,7 +5,7 @@
   "intro": [
     {
       "type": "text",
-      "text": "THIS IS THE FIXTURE HUNT. Every word of it is fake and none of it is part of the game.\n\nIt exists to prove the engine works: word-by-word text, pictures, location gates, a compass, a question with a limited number of guesses, and the three kinds of camera lens. The two gates are in Hyde Park, so they can be walked to and tested for real.\n\nThe pictures are placeholders drawn by the build, not photographs of anything."
+      "text": "THIS IS THE FIXTURE HUNT. Every word of it is fake and none of it is part of the game.\n\nIt exists to prove the engine works: word-by-word text, pictures, location gates, a compass, a question with a limited number of guesses, the three kinds of camera lens, and the live match score with its Progress button. The four gates are all in Hyde Park, so they can be walked to and tested for real.\n\nThe pictures are placeholders drawn by the build, not photographs of anything."
     }
   ],
   "outro": [
@@ -160,6 +160,70 @@
         "kind": "cord",
         "marks_mm": [0, 300, 600, 914],
         "note": "FIXTURE. Drag either end. Calibrate with the diary to lock it to real millimetres."
+      }
+    },
+    {
+      "id": "fixture-calibrate",
+      "chapter": "Fixture, part six",
+      "title": "Calibration stop: the match, ungated",
+      "body": [
+        {
+          "type": "text",
+          "text": "FIXTURE. This is a calibration stop. It exists so the owner can collect match scores on real walls before any real stencil exists.\n\nPass the gate, tap Continue, and the camera opens by itself with a rectangle inside a rectangle laid over it. Point it at a doorway, a window or a notice board and line the outline up. The bar at the bottom is the match score and the numbers under it are what the score is made of.\n\nProgress is available from the start here, so nothing is gated. It turns green when the match passes, which is how you see when it would have gated. Press Log at good and bad alignments, then Copy log from the menu and paste it back."
+        }
+      ],
+      "gate": {
+        "lat": 51.5049,
+        "lon": -0.1697,
+        "radius_m": 40,
+        "prompt": "FIXTURE. Stand by the Diana Memorial Fountain, Hyde Park, then tap the button."
+      },
+      "compass": false,
+      "question": null,
+      "after": [
+        {
+          "type": "text",
+          "text": "FIXTURE. Progress was tapped, the lens closed, and this arrived. The Lens button above reopens the stencil if you want more samples."
+        }
+      ],
+      "lens": {
+        "kind": "stencil",
+        "src": "img/placeholder-stencil.png",
+        "note": "FIXTURE. Line the rectangle up with a doorway or a window. Watch the bar.",
+        "auto": true,
+        "match": {"threshold": 0.35, "hold_ms": 600, "gate": false, "fallback_s": null}
+      }
+    },
+    {
+      "id": "fixture-calibrate-gated",
+      "chapter": "Fixture, part seven",
+      "title": "Calibration stop: the match, gated",
+      "body": [
+        {
+          "type": "text",
+          "text": "FIXTURE. The same calibration stop again, gated this time. Progress stays grey until the bar has been green for six tenths of a second, and goes grey again if the match is lost.\n\nIf it will not match, it lights by itself after forty-five seconds of trying. The counter beside the button is how long you have been at it."
+        }
+      ],
+      "gate": {
+        "lat": 51.5049,
+        "lon": -0.1697,
+        "radius_m": 40,
+        "prompt": "FIXTURE. Same spot: by the Diana Memorial Fountain, Hyde Park. Tap the button."
+      },
+      "compass": false,
+      "question": null,
+      "after": [
+        {
+          "type": "text",
+          "text": "FIXTURE. That was the gated match. Next is the ending."
+        }
+      ],
+      "lens": {
+        "kind": "stencil",
+        "src": "img/placeholder-stencil.png",
+        "note": "FIXTURE. Line the rectangle up. Progress stays grey until it matches, or until 45 seconds have gone.",
+        "auto": true,
+        "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": 45}
       }
     }
   ]

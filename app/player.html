@@ -144,7 +144,19 @@
               margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
   .gatenote { font-size: .68rem; color: var(--ink-soft); margin-top: 6px; }
   .gatedone { margin-top: 14px; font-size: .82rem; color: var(--good);
-              font-weight: 600; }
+              font-weight: 600; text-align: center; }
+  .gatedone .btn { margin-top: 10px; }
+  .matchwait { margin-top: 12px; font-size: .82rem; color: var(--ink-soft);
+               text-align: center; line-height: 1.45; }
+  /* The haptic switch. iOS Safari has no vibration API, but flipping a native
+     switch control fires the system's light tick, so one lives here off the
+     edge of the screen. Not display: none, which would silence it. */
+  #haptic { position: absolute; left: -200vw; top: 0; width: 1px; height: 1px;
+            margin: 0; opacity: .01; pointer-events: none; }
+  .logbox { width: 100%; min-height: 8em; margin-top: 10px; font-family: ui-monospace,
+            SFMono-Regular, Menlo, monospace; font-size: .7rem; padding: 8px;
+            border-radius: 8px; border: 1px solid var(--line); background: var(--paper);
+            color: var(--ink); white-space: pre; overflow: auto; }
   /* One of eight letters and nothing else. No distance, no "close", because a
      number that shrinks as you walk is a map, and this game is not a map. */
   .compass { margin-top: 12px; display: flex; align-items: baseline;
@@ -262,6 +274,7 @@
 
 <div id="modal"><div class="card" id="modalcard"></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<input type="checkbox" switch id="haptic" tabindex="-1" aria-hidden="true">
 
 <!-- HUNT GOES HERE -->
 <script src="lens.js"></script>
@@ -496,9 +509,45 @@ function answerAccepted(given, accepted) {
 
 /* ---- state ---- */
 function freshState() {
-  return { current: 0, gate: {}, result: {}, used: {}, seen: [] };
+  return { current: 0, gate: {}, cont: {}, matched: {}, result: {}, used: {}, seen: [] };
 }
 function saveState() { if (STATE) LS.set("state", STATE); }
+
+/* ---- haptics ----
+   One tick, on a tap, when the tap succeeds at something. Android vibrates.
+   iPhone has no vibration API, so a native switch control is flipped instead,
+   which fires the system's light tick from iOS 17.4. Both only work from
+   inside the tap itself: never after an await, a timer or a location
+   callback, because on iPhone those fire nothing. So anything that succeeds
+   asynchronously does not tick; it lights a button, and the tap on that
+   button ticks. */
+function haptic() {
+  try { if (navigator.vibrate) navigator.vibrate(15); } catch (err) { /* unsupported */ }
+  const sw = $("haptic");
+  if (sw) sw.checked = !sw.checked;
+}
+window.haptic = haptic;
+
+/* ---- the calibration log ----
+   One line per press of Log on a match lens, kept per hunt, copied out of the
+   menu as plain text. This is how the thresholds get corrected: the owner
+   stands in front of real walls, presses Log at good and bad alignments, and
+   pastes the lot back. It survives Start over on purpose, because the walk
+   being reset is not the samples being worthless. */
+const LOG_HEAD = ["stop", "time", "score", "on", "off", "x", "y", "scale", "rot", "matched", "acc_m"];
+function logLine(f) {
+  const lines = LS.get("log", []);
+  lines.push([f.stop, f.time, f.score.toFixed(3), f.on.toFixed(3), f.off.toFixed(3),
+              f.x.toFixed(1), f.y.toFixed(1), f.scale.toFixed(3), f.rot.toFixed(1),
+              f.matched ? "yes" : "no", f.acc == null ? "" : Math.round(f.acc)].join("\t"));
+  LS.set("log", lines);
+}
+function logText() {
+  const lines = LS.get("log", []);
+  return lines.length ? [LOG_HEAD.join("\t"), ...lines].join("\n") + "\n" : "";
+}
+// The most recent thing the phone said about where it is, for the log.
+let lastFix = null;
 
 /* ---- blocks ---- */
 function imageFigure(b) {
@@ -616,25 +665,51 @@ function openCard(i) {
 
   const runs = [];
   const tip = attachRush(div, runs);
+  // live: the reveal actually ran, so this is the stop being read for the
+  // first time rather than a card rebuilt after a tap or a reload.
+  const live = !REDUCED && !seenSet().has("body:" + s.id);
   const run = runBlocks(div, s.body, "body:" + s.id, () => {
     tip.remove();
-    afterBody(div, i, runs);
+    afterBody(div, i, runs, live);
   });
   runs.push(run);
   if (run.active) div.querySelector(".stitle").after(tip);
   return div;
 }
 
-function afterBody(card, i, runs) {
+// A match lens is a step in the stop, not a tool beside it: it opens by itself
+// and the stop waits until Progress is tapped inside it.
+function matchPending(s) {
+  return !!(s.lens && s.lens.kind === "stencil" && s.lens.match && !STATE.matched[s.id]);
+}
+function autoLens(s) {
+  return !!(s.lens && s.lens.kind === "stencil" && s.lens.auto && matchPending(s));
+}
+
+function afterBody(card, i, runs, live) {
   const s = HUNT.stops[i];
   if (s.gate && !STATE.gate[s.id]) { card.appendChild(gateSection(i)); return; }
-  if (s.gate) card.appendChild(gateDone());
+  // Passed but not yet continued: the gate's Continue button is the tap the
+  // haptic lives on, and for an auto lens it is also the gesture the camera
+  // is asked for inside. Nothing below it appears until it is tapped.
+  if (s.gate && !STATE.cont[s.id]) { card.appendChild(gateDone(i)); return; }
+  if (s.gate) card.appendChild(gateDone(i));
   afterGate(card, i, runs);
+  // No gate: the lens opens when the body reveal finishes, the first time the
+  // stop is read. A reload later shows the Lens button and waits.
+  if (!s.gate && live && autoLens(s)) openLens(s);
 }
 
 function afterGate(card, i, runs) {
   const s = HUNT.stops[i];
   if (s.lens) card.appendChild(lensRow(s));
+  if (matchPending(s)) {
+    const wait = document.createElement("div");
+    wait.className = "matchwait";
+    wait.textContent = "Line the stencil up and tap Progress in the lens to go on.";
+    card.appendChild(wait);
+    return;
+  }
   if (s.question && !stopResult(s)) { card.appendChild(questionSection(i)); return; }
   if (s.question) card.appendChild(verdictLine(s));
   afterResolved(card, i, runs);
@@ -679,13 +754,39 @@ function lensRow(s) {
 }
 function openLens(s) {
   if (!window.Lens) { toast("The lens did not load."); return; }
-  window.Lens.open(s.lens, HUNT.diary_mm || { w: 148, h: 210 });
+  window.Lens.open(s.lens, HUNT.diary_mm || { w: 148, h: 210 }, {
+    stopId: s.id,
+    getAccuracy: () => (lastFix && lastFix.accuracy != null ? lastFix.accuracy : null),
+    logLine,
+    // Progress was tapped: the lens has closed and ticked, the stop goes on.
+    onProgress: () => {
+      STATE.matched[s.id] = true;
+      saveState();
+      renderWalk();
+    },
+  });
 }
 
-function gateDone() {
+// "You're here." and, until it is tapped, a Continue button. The gate passed
+// asynchronously so it could not tick; the tap can. It is enabled only once
+// the gate has passed, so it is not a skip.
+function gateDone(i) {
+  const s = HUNT.stops[i];
   const d = document.createElement("div");
   d.className = "gatedone";
   d.textContent = "You're here.";
+  if (STATE.cont[s.id]) return d;
+  const btn = document.createElement("button");
+  btn.className = "btn primary";
+  btn.textContent = "Continue";
+  btn.onclick = () => {
+    haptic();
+    STATE.cont[s.id] = true;
+    saveState();
+    renderWalk();
+    if (autoLens(s)) openLens(s);
+  };
+  d.appendChild(btn);
   return d;
 }
 
@@ -726,7 +827,10 @@ function startCompass(s, el) {
   if (SIM) { paint(SIM.lat, SIM.lon, SIM.acc); return; }
   if (!navigator.geolocation) return;
   compassWatch = navigator.geolocation.watchPosition(
-    (pos) => paint(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+    (pos) => {
+      lastFix = pos.coords;
+      paint(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+    },
     () => { el.hidden = true; },
     { enableHighAccuracy: true, maximumAge: 5000 });
 }
@@ -800,6 +904,7 @@ async function checkin(i, btn, stat, compass) {
   let c;
   try {
     c = await getFix();
+    lastFix = c;
   } catch (err) {
     stat.textContent = err && err.code === 1
       ? "Location is blocked for this site. Allow it in your browser settings."
@@ -857,6 +962,7 @@ function questionSection(i) {
     const said = inp.value.trim();
     if (!said) { toast("Type something first."); return; }
     if (answerAccepted(said, q.answers)) {
+      haptic();                     // synchronous, in the tap, before anything else
       STATE.result[s.id] = "right";
       saveState();
       renderWalk();
@@ -930,15 +1036,42 @@ function tally() {
 
 /* ---- the menu ---- */
 function openMenu() {
+  const n = LS.get("log", []).length;
   $("modalcard").innerHTML = `<h2>Menu</h2>
     <div class="sub">Progress lives on this phone and nowhere else.</div>
     <div class="btnrow"><button class="btn ghost" id="mclose">Close</button>
       <button class="btn primary" id="mrestart">Start over</button></div>
+    <div class="btnrow"><button class="btn ghost" id="mcopylog"${n ? "" : " disabled"}>
+      Copy log${n ? ` (${n} line${n === 1 ? "" : "s"})` : ""}</button></div>
+    <div id="loghost"></div>
     <div id="simhost"></div>`;
   $("modal").classList.add("show");
   $("mclose").onclick = closeModal;
   $("mrestart").onclick = confirmRestart;
+  $("mcopylog").onclick = copyLog;
   if (TESTING) $("simhost").appendChild(simControls());
+}
+
+// The whole log onto the clipboard as plain text. Where the clipboard is
+// refused, the text is shown selected instead, which is the same thing with
+// one more tap.
+async function copyLog() {
+  const text = logText();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Log copied.");
+    return;
+  } catch (err) { /* fall through to the box */ }
+  const host = $("loghost");
+  host.innerHTML = "";
+  const box = document.createElement("textarea");
+  box.className = "logbox";
+  box.readOnly = true;
+  box.value = text;
+  host.appendChild(box);
+  box.focus(); box.select();
+  toast("Could not reach the clipboard. Copy it from the box.");
 }
 
 function confirmRestart() {
@@ -1115,6 +1248,10 @@ function beginWalk() {
 
   STATE = LS.get("state", null);
   if (!STATE || typeof STATE.current !== "number") STATE = freshState();
+  // A walk saved by an earlier build predates some of these. Fill them in
+  // rather than start the phone over.
+  for (const k of ["gate", "cont", "matched", "result", "used"]) STATE[k] = STATE[k] || {};
+  STATE.seen = STATE.seen || [];
   // A made-up position must never outlive testing mode. Without this, somebody
   // who once opened the page with ?testing=1 would carry a working bypass in
   // local storage into a real walk, and the gates would be quietly off.

@@ -39,6 +39,39 @@ off unless asked for by name, and it does not weaken the real gate rule.
 
 The camera and the real gates can only be tested on a phone, at the Pages URL.
 
+## Stencils and the match
+
+A stencil lens can carry a `match` block, at which point the lens scores how
+well the edges in the camera frame line up with the stencil, several times a
+second, and shows the score as a bar with a Progress button under it. The
+player still lines the stencil up by hand; the code only checks the alignment.
+
+    "lens": {
+      "kind": "stencil",
+      "src": "img/placeholder-stencil.png",
+      "note": "Line the outline up with the plaque.",
+      "auto": true,
+      "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": null}
+    }
+
+`auto` opens the lens by itself once the stop's gate has been passed and
+Continue tapped, or when the body finishes revealing if there is no gate.
+`threshold` is the score that counts as matched, `hold_ms` how long it must
+stay there, `gate` whether Progress waits for it, and `fallback_s` how many
+seconds of trying light Progress anyway (null: never). The Log button in the
+lens appends one sample per press to a per-hunt log on the phone; **Copy log**
+in the menu puts it on the clipboard as tab-separated text with a header row.
+
+**Supplying a real stencil.** A PNG with a transparent background and dark
+lines 2–4 px wide, at roughly 600–800 px on the long side, drawn from a
+head-on photo of the target at the framing a phone gets from three to five
+metres. Big distinctive edges only: the outline and two or three strong
+internal lines. A stencil that traces every engraved letter fails in glare;
+one that is only a rectangle matches anything. Drop it in `app/img/`, point
+`src` at it, and the build checks it exists. `img/placeholder-stencil.png` is
+a rectangle inside a rectangle, which roughly fits a doorway, a window or a
+notice board, for testing on almost any wall before real stencils exist.
+
 ## Deploy
 
 Pushing to `main` builds and publishes to GitHub Pages. Which hunt gets
