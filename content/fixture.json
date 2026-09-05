@@ -1,6 +1,7 @@
 {
   "id": "fixture",
   "title": "The Architect Order — fixture hunt",
+  "skips": true,
   "diary_mm": {"w": 148, "h": 210},
   "intro": [
     {
@@ -58,19 +59,21 @@
       "id": "fixture-gate-compass",
       "chapter": "Fixture, part two",
       "title": "A gate, and a letter to walk on",
+      "reveal": {"at_m": 500, "chapter": "Fixture, part two: Speakers' Corner"},
       "body": [
         {
           "type": "text",
-          "text": "FIXTURE. This stop will not go on until the phone is within forty metres of Speakers' Corner, at the north-east corner of Hyde Park.\n\nThere is no way past it. There is no skip button, and there never will be.\n\nWhile you are more than five hundred metres out, and only while the phone actually knows where it is, a single compass letter appears under the button. Inside five hundred metres it disappears completely: not \"close\", not a distance, nothing."
+          "text": "FIXTURE. This stop will not go on until the phone is within forty metres of a corner of Hyde Park. Which corner is not said yet: the label above this title changes to name it once you are inside five hundred metres, and stays changed.\n\nWhile you are more than five hundred metres out, and only while the phone actually knows where it is, a single compass letter appears under the button. Inside five hundred metres it disappears completely. The distance under it stays all the way in.\n\nThe Skip button is here because this hunt has skips switched on. Turn them off in the content and it goes."
         }
       ],
       "gate": {
         "lat": 51.5127,
         "lon": -0.159,
         "radius_m": 40,
-        "prompt": "FIXTURE. Stand near Speakers' Corner, Hyde Park, then tap the button."
+        "prompt": "FIXTURE. Stand at the corner of Hyde Park this stop names when you get close, then tap the button."
       },
       "compass": true,
+      "distance": true,
       "question": null,
       "after": [
         {

@@ -78,7 +78,7 @@
                padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
                background: linear-gradient(to bottom, rgba(0,0,0,.62), rgba(0,0,0,0));
                display: flex; align-items: center; gap: 10px; }
-    #lensnote { font-size: .78rem; line-height: 1.35; flex: 1;
+    #lensnote { font-size: .78rem; line-height: 1.35; flex: 1; white-space: pre-line;
                 text-shadow: 0 1px 3px rgba(0,0,0,.8); }
     .lensx { border: none; background: rgba(255,255,255,.16); color: #fff;
              width: 44px; height: 44px; border-radius: 999px; font-size: 1.2rem;
@@ -152,6 +152,7 @@
           <div id="matchnums">score 0.00 · on 0.00 · off 0.00</div>
           <div class="lensrowb">
             <button class="lensb" id="matchlog">Log</button>
+            <button class="lensb" id="matchskip" hidden>Skip</button>
             <button class="lensb" id="matchgo" disabled>Progress</button>
             <span id="matchtried"></span>
           </div>
@@ -186,6 +187,12 @@
     root.querySelector("#matchgo").onclick = () => {
       haptic();
       const done = cfg.opts.onProgress;
+      close();
+      if (done) done();
+    };
+    // Skipping is not a success, so it does not tick.
+    root.querySelector("#matchskip").onclick = () => {
+      const done = cfg.opts.onSkip;
       close();
       if (done) done();
     };
@@ -257,7 +264,9 @@
   // itself may also have asked outside a tap, which some browsers refuse, so
   // there is a button to ask again from inside one.
   function fallback(why) {
-    note(why);
+    // The stop's instruction stays; the reason the camera is missing goes
+    // under it. Losing the instruction to the excuse helped nobody.
+    note((cfg.lens.note ? cfg.lens.note + "\n" : "") + why);
     clearFallback();
     const row = root.querySelector("#lensactions");
     const again = el("button", "lensb fallbackb", "Try the camera");
@@ -580,6 +589,7 @@
       timer: null,
     };
     root.querySelector("#matchtick").style.left = (m.threshold * 100) + "%";
+    root.querySelector("#matchskip").hidden = !cfg.opts.skips;
     paintMatch();
     match.timer = setInterval(matchTick, MATCH_EVERY_MS);
   }

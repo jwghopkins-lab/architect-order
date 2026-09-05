@@ -146,12 +146,28 @@ def check_lens(lens, where, images):
             fail(where, "cord marks_mm must start at 0 and increase")
 
 
+def check_reveal(r, where):
+    """A name that resolves on approach. Needs somewhere to approach."""
+    if not isinstance(r, dict):
+        fail(where, "reveal must be an object")
+    at = r.setdefault("at_m", 500)
+    if not is_num(at) or at <= 0:
+        fail(where, f"reveal at_m is {at!r}, must be a positive number of metres")
+    if not str(r.get("chapter") or "").strip() and not str(r.get("title") or "").strip():
+        fail(where, "reveal needs a chapter or a title to change to")
+
+
 def validate(hunt):
     """Check the whole hunt. Returns the image srcs it referenced."""
     images = []
     for field in ("id", "title", "stops"):
         if not hunt.get(field):
             fail("hunt", f"no {field}")
+    # One flag for every skip button in the hunt, so they can all be turned
+    # off with one edit before anybody plays for real.
+    skips = hunt.setdefault("skips", False)
+    if not isinstance(skips, bool):
+        fail("hunt", f"skips is {skips!r}, must be true or false")
     check_blocks(hunt.get("intro", []), "hunt.intro", images)
     check_blocks(hunt.get("outro", []), "hunt.outro", images)
 
@@ -183,6 +199,12 @@ def validate(hunt):
             check_gate(gate, where)
         if s.get("compass") and not gate:
             fail(where, "compass is on but there is no gate to point at")
+        if s.get("distance") and not gate:
+            fail(where, "distance is on but there is no gate to measure to")
+        if s.get("reveal") is not None:
+            if not gate:
+                fail(where, "reveal needs a gate: there is nothing to approach")
+            check_reveal(s["reveal"], where)
         if s.get("question"):
             check_question(s["question"], where)
         if s.get("lens"):
@@ -190,7 +212,7 @@ def validate(hunt):
     return images
 
 
-def build(content_path):
+def build(content_path, out_dir):
     hunt = json.loads(Path(content_path).read_text(encoding="utf-8"))
     images = validate(hunt)
 
@@ -206,28 +228,39 @@ def build(content_path):
     page = page.replace("<title>The Architect Order</title>",
                         f"<title>{hunt['title']}</title>", 1)
 
-    if SITE.exists():
-        shutil.rmtree(SITE)
-    SITE.mkdir(parents=True)
-    (SITE / "index.html").write_text(page, encoding="utf-8")
-    shutil.copy2(APP / "lens.js", SITE / "lens.js")
-    if (APP / "img").is_dir():
-        shutil.copytree(APP / "img", SITE / "img")
+    # Only this hunt's own directory is cleared, so the fixture can be built
+    # into a corner of the real site without flattening it.
+    out = Path(out_dir)
+    if out.resolve() == BASE.resolve() or out.resolve() in BASE.resolve().parents:
+        fail("output", f"{out} is the repository itself, not a place to build into")
+    if out.exists():
+        shutil.rmtree(out)
+    out.mkdir(parents=True)
+    (out / "index.html").write_text(page, encoding="utf-8")
+    shutil.copy2(APP / "lens.js", out / "lens.js")
+    # Only the images the hunt refers to. app/img/ also holds the other hunts'
+    # pictures and the stencil preview that is documentation, not content, and
+    # none of that belongs on a page handed to a player.
+    for src in sorted(set(images)):
+        dest = out / src
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(APP / src, dest)
 
-    print(f"built site/index.html from {content_path}")
+    print(f"built {out / 'index.html'} from {content_path}")
     print(f"  {hunt['id']}: {len(hunt['stops'])} stops, "
           f"{sum(1 for s in hunt['stops'] if s.get('gate'))} gates, "
           f"{sum(1 for s in hunt['stops'] if s.get('question'))} questions, "
           f"{sum(1 for s in hunt['stops'] if s.get('lens'))} lenses, "
-          f"{len(set(images))} images")
+          f"{len(set(images))} images, skips {'on' if hunt['skips'] else 'off'}")
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("usage: python3 pipeline/build.py content/<hunt>.json", file=sys.stderr)
+    if len(sys.argv) not in (2, 3):
+        print("usage: python3 pipeline/build.py content/<hunt>.json [output dir, default site]",
+              file=sys.stderr)
         return 2
     try:
-        build(sys.argv[1])
+        build(sys.argv[1], sys.argv[2] if len(sys.argv) == 3 else SITE)
     except ContentError as err:
         print(f"content error — {err}", file=sys.stderr)
         return 1

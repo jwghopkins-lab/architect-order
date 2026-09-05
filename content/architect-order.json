@@ -1,0 +1,41 @@
+{
+  "id": "architect-order",
+  "title": "The Architect Order",
+  "skips": true,
+  "diary_mm": {"w": 148, "h": 210},
+  "intro": [
+    {"type": "text", "text": "[Intro to come.]"}
+  ],
+  "outro": [
+    {"type": "text", "text": "[Outro to come.]"}
+  ],
+  "stops": [
+    {
+      "id": "first",
+      "chapter": "Location one",
+      "title": "The first place",
+      "reveal": {"at_m": 500, "chapter": "Westminster"},
+      "body": [
+        {"type": "text",
+         "text": "Go to the place where fire burned the length of England. Then find this building."},
+        {"type": "image", "src": "img/jewel-tower-sketch.png",
+         "alt": "A pen sketch of a building, torn from a notebook", "caption": ""}
+      ],
+      "gate": {"lat": 51.4984528, "lon": -0.1260286, "radius_m": 40,
+               "prompt": "Are you standing in front of it?"},
+      "compass": true,
+      "distance": true,
+      "question": null,
+      "after": [
+        {"type": "text", "text": "[After text to come.]"}
+      ],
+      "lens": {
+        "kind": "stencil",
+        "src": "img/jewel-tower-stencil.png",
+        "note": "Line the drawing up with the building.",
+        "auto": true,
+        "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": null}
+      }
+    }
+  ]
+}

@@ -1,9 +1,11 @@
 name: pages
 
-# Which hunt is published. This is the one line the owner edits to switch
-# hunts; everything else in this file is the same for any of them.
+# Which hunts are published. The real hunt goes to the site root, the fixture
+# to /fixture/. These two lines are the ones the owner edits to switch hunts;
+# everything else in this file is the same for any of them.
 env:
-  HUNT: content/fixture.json
+  HUNT: content/architect-order.json
+  FIXTURE: content/fixture.json
 
 on:
   push:
@@ -27,8 +29,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Build the site
-        run: python3 pipeline/build.py "$HUNT"
+      - name: Build both hunts
+        run: |
+          python3 pipeline/build.py "$HUNT" site
+          python3 pipeline/build.py "$FIXTURE" site/fixture
       - uses: actions/configure-pages@v5
         with:
           enablement: true
@@ -37,8 +41,10 @@ jobs:
           path: site
       - id: deployment
         uses: actions/deploy-pages@v4
-      - name: Verify the DEPLOYED url, not the local build
+      - name: Verify the DEPLOYED urls, not the local build
         run: |
           sleep 10
           curl -sSf "${{ steps.deployment.outputs.page_url }}" -o /dev/null
+          curl -sSf "${{ steps.deployment.outputs.page_url }}fixture/" -o /dev/null
           echo "live: ${{ steps.deployment.outputs.page_url }}"
+          echo "fixture: ${{ steps.deployment.outputs.page_url }}fixture/"
