@@ -211,6 +211,11 @@
     await startCamera();
   }
 
+  let generation = 0;     // which opening of the lens a camera request belongs to
+  function stopStream() {
+    if (stream) { for (const t of stream.getTracks()) t.stop(); stream = null; }
+  }
+
   async function startCamera() {
     const video = root.querySelector("#lensfeed");
     // A secure context is required, and file:// is not one. Say which of the
@@ -222,14 +227,25 @@
         : "The camera needs a secure page. Open this over https, not from a file.");
       return;
     }
+    stopStream();
+    const mine = generation;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      const got = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } }, audio: false });
+      // The permission prompt can outlive the lens: tap Continue, tap the
+      // cross before answering, and the camera arrives for a view that is
+      // gone. A stream nobody is looking at is stopped on arrival.
+      if (mine !== generation || !root.classList.contains("on")) {
+        for (const t of got.getTracks()) t.stop();
+        return;
+      }
+      stream = got;
       video.srcObject = stream;
       video.hidden = false;
       root.querySelector("#lensshot").hidden = true;
       clearFallback();
     } catch (err) {
+      if (mine !== generation || !root.classList.contains("on")) return;
       fallback(err && err.name === "NotAllowedError"
         ? "The camera was refused. You can use a photo instead."
         : "No camera here. You can use a photo instead.");
@@ -257,7 +273,8 @@
 
   function close() {
     stopMatch();
-    if (stream) { for (const t of stream.getTracks()) t.stop(); stream = null; }
+    generation += 1;
+    stopStream();
     const video = root.querySelector("#lensfeed");
     video.srcObject = null;
     const shot = root.querySelector("#lensshot");
@@ -634,13 +651,18 @@
     // masks, and that cost is the thumb's, not the frame's.
     const took = now - t0;
     match.ms = took;
+    // The median of the last eight, not the mean of the last four: one
+    // garbage-collection pause or a slow first readback from the camera is a
+    // hiccup, and a hiccup should not demote the lens for the rest of the stop.
     if (!match.rebuilt) {
       match.slow.push(took);
-      if (match.slow.length > 6) match.slow.shift();
-      if (match.workPx === WORK_PX && match.slow.length >= 4
-          && match.slow.reduce((a, b) => a + b, 0) / match.slow.length > SLOW_MS) {
-        match.workPx = WORK_PX_SLOW;
-        match.maskKey = "";
+      if (match.slow.length > 8) match.slow.shift();
+      if (match.workPx === WORK_PX && match.slow.length === 8) {
+        const sorted = [...match.slow].sort((a, b) => a - b);
+        if ((sorted[3] + sorted[4]) / 2 > SLOW_MS) {
+          match.workPx = WORK_PX_SLOW;
+          match.maskKey = "";
+        }
       }
     }
     paintMatch();
@@ -687,9 +709,13 @@
         hist[Math.min(255, (mg * 255 / MAXMAG) | 0)]++;
       }
     }
-    const want = n * 0.99;
+    // The histogram holds the interior only: the one-pixel border has no
+    // gradient. Counting to 99% of the whole frame instead would never get
+    // there on a small frame, and the loop would run off the end and hand
+    // back the Sobel ceiling as the "percentile".
+    const want = (w - 2) * (h - 2) * 0.99;
     let seen = 0, bin = 0;
-    for (; bin < 256; bin++) { seen += hist[bin]; if (seen >= want) break; }
+    for (; bin < 255; bin++) { seen += hist[bin]; if (seen >= want) break; }
     const p99 = Math.max(1e-6, (bin + 1) * MAXMAG / 255);
     for (let i = 0; i < n; i++) mag[i] = Math.min(1, mag[i] / p99);
     return mag;
@@ -720,7 +746,12 @@
     const out = [];
     for (const sc of MATCH_SCALES) {
       const perNative = elW * view.scale * sc * k / img.naturalWidth;   // working px per stencil px
-      const thick = nativeMask(img, Math.max(1, Math.ceil(2 / perNative)));
+      // Not laid out yet: no size, no mask, and nothing to score this tick.
+      if (!(perNative > 0)) { match.maskKey = ""; return []; }
+      // Capped: a stencil pinched down to a speck would ask for a thickening
+      // wider than the stencil, at a cost that grows with it, for a placement
+      // that cannot be scored anyway.
+      const thick = nativeMask(img, Math.min(64, Math.max(1, Math.ceil(2 / perNative))));
       ctx.clearRect(0, 0, w, h);
       ctx.save();
       ctx.translate(view.x * k, view.y * k);
@@ -952,6 +983,7 @@
   // working size it settled on. Read-only, for checking the 10 ms budget.
   function stats() {
     return match ? { ms: match.ms == null ? null : Math.round(match.ms * 100) / 100,
+                     recent: match.slow.map((v) => Math.round(v * 10) / 10),
                      workPx: match.workPx, score: match.smooth, matched: match.matched }
                  : null;
   }

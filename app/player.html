@@ -665,9 +665,10 @@ function openCard(i) {
 
   const runs = [];
   const tip = attachRush(div, runs);
-  // live: the reveal actually ran, so this is the stop being read for the
-  // first time rather than a card rebuilt after a tap or a reload.
-  const live = !REDUCED && !seenSet().has("body:" + s.id);
+  // live: the stop is being read for the first time, rather than a card
+  // rebuilt after a tap or a reload. Reduced motion skips the reveal but not
+  // the arrival, so the lens still opens on it.
+  const live = !seenSet().has("body:" + s.id);
   const run = runBlocks(div, s.body, "body:" + s.id, () => {
     tip.remove();
     afterBody(div, i, runs, live);
