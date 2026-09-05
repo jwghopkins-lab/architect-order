@@ -157,6 +157,9 @@
                  margin: 0; opacity: .01; pointer-events: none; overflow: hidden; }
   .tickinfo { margin-top: 10px; font-size: .78rem; line-height: 1.45; color: var(--ink-soft);
               white-space: pre-line; border-left: 3px solid var(--line); padding-left: 10px; }
+  .tickswitch { display: flex; align-items: center; gap: 10px; width: 100%;
+                font-size: .78rem; color: var(--ink); padding: 6px 0; }
+  .tickswitch input { width: 44px; height: 26px; margin: 0; }
   .logbox { width: 100%; min-height: 8em; margin-top: 10px; font-family: ui-monospace,
             SFMono-Regular, Menlo, monospace; font-size: .7rem; padding: 8px;
             border-radius: 8px; border: 1px solid var(--line); background: var(--paper);
@@ -592,19 +595,41 @@ function haptic() {
   try {
     if (navigator.vibrate) out.vibrate = navigator.vibrate(30) ? "yes" : "refused";
   } catch (err) { out.vibrate = "error"; }
-  // Clicking the label toggles the switch by activation, which is what iOS
-  // ticks on. Assigning checked directly toggles it silently, and that was
-  // the first bug: the control flipped, and the phone said nothing.
-  const label = $("hapticlabel"), sw = $("haptic");
-  if (label && sw) {
-    const was = sw.checked;
-    try { label.click(); } catch (err) { /* nothing to tick */ }
-    // A label that did not reach its control: click the control itself,
-    // which is an activation too.
-    if (sw.checked === was) { try { sw.click(); } catch (err) { /* nothing */ } }
-    out.switched = sw.checked !== was;
-  }
+  // A fresh switch each time, in a hidden label in the head, clicked and
+  // thrown away. This is the recipe the one published iOS haptics library
+  // uses, to the letter, and the one with working demos behind it. The
+  // switch kept in the body, off-screen, is variant B on the test panel.
+  out.switched = tickFreshSwitch();
+  if (out.switched) haptic.count += 1;
   return out;
+}
+haptic.count = 0;
+
+function tickFreshSwitch() {
+  try {
+    const label = document.createElement("label");
+    label.setAttribute("aria-hidden", "true");
+    label.style.display = "none";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.setAttribute("switch", "");
+    label.appendChild(input);
+    document.head.appendChild(label);
+    label.click();
+    const toggled = input.checked;
+    label.remove();
+    return toggled;
+  } catch (err) { return false; }
+}
+// Variant B: the switch that lives in the body, off the edge of the screen,
+// toggled by clicking its label.
+function tickBodySwitch() {
+  const label = $("hapticlabel"), sw = $("haptic");
+  if (!label || !sw) return false;
+  const was = sw.checked;
+  try { label.click(); } catch (err) { /* nothing */ }
+  if (sw.checked === was) { try { sw.click(); } catch (err) { /* nothing */ } }
+  return sw.checked !== was;
 }
 
 // What the phone says about itself, and where its tick setting lives. The
@@ -1250,7 +1275,14 @@ function openMenu() {
     <div class="btnrow"><button class="btn ghost" id="mcopylog"${n ? "" : " disabled"}>
       Copy log${n ? ` (${n} line${n === 1 ? "" : "s"})` : ""}</button>${HUNT.test_mode
       ? `<button class="btn ghost" id="mtick">Test the tick</button>` : ""}</div>
-    <div id="tickinfo" class="tickinfo" hidden></div>
+    <div id="tickinfo" class="tickinfo" hidden></div>${HUNT.test_mode
+      ? `<div class="devrow" id="tickvariants">
+           <span class="devlabel">If that did not tick, try each of these and say which does</span>
+           <button data-tick="B">B · off-screen switch</button>
+           <button data-tick="C">C · this switch, by script</button>
+           <label class="tickswitch">D · tap this switch yourself
+             <input type="checkbox" switch id="tickvisible"></label>
+         </div>` : ""}
     <div id="loghost"></div>
     <div id="simhost"></div>`;
   $("modal").classList.add("show");
@@ -1259,12 +1291,23 @@ function openMenu() {
   $("mcopylog").onclick = copyLog;
   // Test mode only: one tap, one tick, and a line saying what the phone did
   // with it, so the haptic can be checked without walking to a gate and a
-  // silent phone says why.
-  if ($("mtick")) $("mtick").onclick = () => {
-    const r = haptic();
-    $("tickinfo").textContent = hapticReport(r);
-    $("tickinfo").hidden = false;
-  };
+  // silent phone says why. Under it, the other ways of asking, because the
+  // phone cannot be felt from here and the owner can say which one works.
+  if ($("mtick")) {
+    $("mtick").onclick = () => {
+      const r = haptic();
+      $("tickinfo").textContent = hapticReport(r);
+      $("tickinfo").hidden = false;
+    };
+    const say = (msg) => { $("tickinfo").textContent = msg; $("tickinfo").hidden = false; };
+    $("tickvariants").querySelector('[data-tick="B"]').onclick = () =>
+      say(`B: off-screen switch ${tickBodySwitch() ? "toggled" : "did not toggle"}.`);
+    $("tickvariants").querySelector('[data-tick="C"]').onclick = () => {
+      const sw = $("tickvisible"), was = sw.checked;
+      sw.closest("label").click();
+      say(`C: visible switch ${sw.checked !== was ? "toggled by script" : "did not toggle"}.`);
+    };
+  }
   if (TESTING) $("simhost").appendChild(simControls());
 }
 
