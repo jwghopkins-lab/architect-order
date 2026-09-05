@@ -147,19 +147,22 @@
   .gatedone .btn { margin-top: 10px; }
   .matchwait { margin-top: 12px; font-size: .82rem; color: var(--ink-soft);
                text-align: center; line-height: 1.45; }
-  /* The haptic switch. iOS Safari has no vibration API, but toggling a native
-     switch control fires the system's light tick, so one lives here in a
-     label off the edge of the screen. Not display: none, which would silence
-     it. The label matters: the tick only comes when the switch is toggled by
-     an activation, and clicking the label is one; setting checked from script
-     flips the control silently. */
-  #hapticlabel { position: absolute; left: -200vw; top: 0; width: 1px; height: 1px;
-                 margin: 0; opacity: .01; pointer-events: none; overflow: hidden; }
+  /* The tick. iOS Safari has no vibration API, and it ticks a native switch
+     control only when a finger lands on the switch itself: toggled from
+     script, by its label or by its own click(), it stays silent. So every
+     button carries an invisible switch stretched over its whole face. The
+     finger lands on the switch, the phone ticks, and the tap bubbles up to the
+     button and does what the button does. Scaled with a transform because a
+     native control ignores width and height; clipped so it never spills. */
+  button { position: relative; }
+  .tickpad { position: absolute; inset: 0; overflow: hidden; display: block;
+             border-radius: inherit; }
+  .tickpad input { position: absolute; left: 50%; top: 50%; width: 51px; height: 31px;
+                   margin: -15.5px 0 0 -25.5px; opacity: 0; transform-origin: 50% 50%;
+                   transform: scale(var(--sx, 1), var(--sy, 1)); }
+  button:disabled .tickpad { pointer-events: none; }
   .tickinfo { margin-top: 10px; font-size: .78rem; line-height: 1.45; color: var(--ink-soft);
               white-space: pre-line; border-left: 3px solid var(--line); padding-left: 10px; }
-  .tickswitch { display: flex; align-items: center; gap: 10px; width: 100%;
-                font-size: .78rem; color: var(--ink); padding: 6px 0; }
-  .tickswitch input { width: 44px; height: 26px; margin: 0; }
   .logbox { width: 100%; min-height: 8em; margin-top: 10px; font-family: ui-monospace,
             SFMono-Regular, Menlo, monospace; font-size: .7rem; padding: 8px;
             border-radius: 8px; border: 1px solid var(--line); background: var(--paper);
@@ -290,7 +293,6 @@
 
 <div id="modal"><div class="card" id="modalcard"></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<label id="hapticlabel" aria-hidden="true"><input type="checkbox" switch id="haptic" tabindex="-1"></label>
 
 <!-- HUNT GOES HERE -->
 <script src="lens.js"></script>
@@ -585,52 +587,72 @@ function saveState() { if (STATE) LS.set("state", STATE); }
    callback, because on iPhone those fire nothing. So anything that succeeds
    asynchronously does not tick; it lights a button, and the tap on that
    button ticks. */
-// Returns what happened, for the test button: whether the phone has a
-// vibration API and what it answered, and whether the switch toggled.
+// The tick that script can make: a vibration where there is a vibration API.
+// On iPhone there is none, and the switch tick cannot be made from script at
+// all, so there the tick comes from the switch under the finger (armTicks,
+// below), and this does nothing the phone can feel. Returns what happened,
+// for the test button.
 function haptic() {
-  const out = { vibrate: "none", switched: false };
-  // 30 ms rather than the 15 first specified: a pulse that short is under
-  // what many Android motors can produce at all, and a tick nobody can feel
-  // is the same as no tick.
+  const out = { vibrate: "none" };
+  // 50 ms: the owner asked for more than the 15 first specified, and a pulse
+  // under about 30 is beneath what many Android motors can make at all.
   try {
-    if (navigator.vibrate) out.vibrate = navigator.vibrate(30) ? "yes" : "refused";
+    if (navigator.vibrate) out.vibrate = navigator.vibrate(50) ? "yes" : "refused";
   } catch (err) { out.vibrate = "error"; }
-  // A fresh switch each time, in a hidden label in the head, clicked and
-  // thrown away. This is the recipe the one published iOS haptics library
-  // uses, to the letter, and the one with working demos behind it. The
-  // switch kept in the body, off-screen, is variant B on the test panel.
-  out.switched = tickFreshSwitch();
-  if (out.switched) haptic.count += 1;
+  haptic.count += 1;
   return out;
 }
 haptic.count = 0;
+let lastTick = null;
 
-function tickFreshSwitch() {
-  try {
-    const label = document.createElement("label");
-    label.setAttribute("aria-hidden", "true");
-    label.style.display = "none";
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.setAttribute("switch", "");
-    label.appendChild(input);
-    document.head.appendChild(label);
-    label.click();
-    const toggled = input.checked;
-    label.remove();
-    return toggled;
-  } catch (err) { return false; }
+/* ---- every tap ticks ----
+   Each button gets an invisible native switch stretched over its face. On
+   iPhone the finger lands on the switch and the phone ticks, which is the one
+   way a web page gets a tick there; the tap bubbles to the button and does
+   the button's job. Everywhere else the overlay is inert and the tick is the
+   vibration, made once per tap here in the capture phase, before the button's
+   own handler runs, so it is inside the tap and never after an await. */
+const SWITCH_W = 51, SWITCH_H = 31;     // a native switch's own size
+const sized = new ResizeObserver((entries) => {
+  for (const e of entries) fitTick(e.target);
+});
+function fitTick(btn) {
+  const sw = btn.querySelector(":scope > .tickpad > input");
+  if (!sw) return;
+  // Exactly the button's face, smaller than a switch where the button is: a
+  // switch wider than a round menu button would take taps from beside it.
+  const r = btn.getBoundingClientRect();
+  sw.style.setProperty("--sx", Math.max(0.2, r.width / SWITCH_W).toFixed(3));
+  sw.style.setProperty("--sy", Math.max(0.2, r.height / SWITCH_H).toFixed(3));
 }
-// Variant B: the switch that lives in the body, off the edge of the screen,
-// toggled by clicking its label.
-function tickBodySwitch() {
-  const label = $("hapticlabel"), sw = $("haptic");
-  if (!label || !sw) return false;
-  const was = sw.checked;
-  try { label.click(); } catch (err) { /* nothing */ }
-  if (sw.checked === was) { try { sw.click(); } catch (err) { /* nothing */ } }
-  return sw.checked !== was;
+function armTicks(root) {
+  const list = root.matches && root.matches("button") ? [root] : [];
+  for (const b of list.concat([...root.querySelectorAll("button")])) {
+    if (b.dataset.ticked) continue;
+    b.dataset.ticked = "1";
+    const pad = document.createElement("span");
+    pad.className = "tickpad";
+    const sw = document.createElement("input");
+    sw.type = "checkbox";
+    sw.setAttribute("switch", "");
+    sw.tabIndex = -1;
+    sw.setAttribute("aria-hidden", "true");
+    pad.appendChild(sw);
+    b.appendChild(pad);
+    fitTick(b);
+    sized.observe(b);
+  }
 }
+// Buttons come and go with every render, in the player and in the lens, so
+// new ones are armed as they appear rather than by every place that makes one.
+new MutationObserver((muts) => {
+  for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) armTicks(n);
+}).observe(document.documentElement, { childList: true, subtree: true });
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest && ev.target.closest("button");
+  if (!b || b.disabled) return;
+  lastTick = haptic();
+}, true);
 
 // What the phone says about itself, and where its tick setting lives. The
 // tick either works or it does not, and a phone that says nothing is a phone
@@ -645,13 +667,13 @@ function hapticReport(r) {
   const facts = [
     ios ? "iPhone" : android ? "Android" : "not a phone",
     ver, navigator.standalone ? "Home Screen app" : "", inApp ? "in-app browser" : "",
-    `vibrate: ${r.vibrate}`, `switch: ${switchOk ? "supported" : "unsupported"}, ${r.switched ? "toggled" : "did not toggle"}`,
+    `vibrate: ${r.vibrate}`, `switch under the finger: ${switchOk ? "yes" : "unsupported"}`,
   ].filter(Boolean).join(" · ");
   let advice;
   if (ios && !switchOk) {
     advice = "This iPhone's browser does not know the switch control, so it cannot tick. iOS 17.4 or later, in Safari or Chrome.";
   } else if (ios) {
-    advice = "The switch toggled, so the phone was asked. If nothing was felt: Settings → Sounds & Haptics → System Haptics on, and Haptics set to Always Play or Play in Silent Mode. Settings → Accessibility → Touch → Vibration on. An in-app browser or a Home Screen copy may not tick; open the link in Safari itself.";
+    advice = "Your finger landed on a switch, which is the one way this phone ticks. If nothing was felt: Settings → Sounds & Haptics → System Haptics on, and Haptics set to Always Play or Play in Silent Mode. Settings → Accessibility → Touch → Vibration on. An in-app browser or a Home Screen copy may not tick; open the link in Safari itself.";
   } else if (android) {
     advice = r.vibrate === "refused"
       ? "The browser refused to vibrate. Chrome only allows it after a tap on the page, which this was, so it is likely a site setting: tap the lock icon in the address bar → Permissions, or Chrome → Settings → Site settings, and allow vibration if it is listed."
@@ -945,7 +967,6 @@ function gateDone(i) {
   btn.className = "btn primary";
   btn.textContent = "Continue";
   btn.onclick = () => {
-    haptic();
     STATE.cont[s.id] = true;
     saveState();
     renderWalk();
@@ -1171,11 +1192,13 @@ function questionSection(i) {
   };
   paint();
 
-  const submit = () => {
+  const submit = (viaKey) => {
     const said = inp.value.trim();
     if (!said) { toast("Type something first."); return; }
     if (answerAccepted(said, q.answers)) {
-      haptic();                     // synchronous, in the tap, before anything else
+      // The Check button ticked on its own tap. Enter on the keyboard is not
+      // a tap on a button, so it ticks here, synchronously, before anything.
+      if (viaKey) haptic();
       STATE.result[s.id] = "right";
       saveState();
       renderWalk();
@@ -1196,9 +1219,9 @@ function questionSection(i) {
     paint();
     inp.select();
   };
-  wrap.querySelector(".btn").onclick = submit;
+  wrap.querySelector(".btn").onclick = () => submit(false);
   inp.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") { ev.preventDefault(); submit(); }
+    if (ev.key === "Enter") { ev.preventDefault(); submit(true); }
   });
   if (HUNT.test_mode) {
     wrap.appendChild(skipButton("Skip this question", () => {
@@ -1275,39 +1298,19 @@ function openMenu() {
     <div class="btnrow"><button class="btn ghost" id="mcopylog"${n ? "" : " disabled"}>
       Copy log${n ? ` (${n} line${n === 1 ? "" : "s"})` : ""}</button>${HUNT.test_mode
       ? `<button class="btn ghost" id="mtick">Test the tick</button>` : ""}</div>
-    <div id="tickinfo" class="tickinfo" hidden></div>${HUNT.test_mode
-      ? `<div class="devrow" id="tickvariants">
-           <span class="devlabel">If that did not tick, try each of these and say which does</span>
-           <button data-tick="B">B · off-screen switch</button>
-           <button data-tick="C">C · this switch, by script</button>
-           <label class="tickswitch">D · tap this switch yourself
-             <input type="checkbox" switch id="tickvisible"></label>
-         </div>` : ""}
+    <div id="tickinfo" class="tickinfo" hidden></div>
     <div id="loghost"></div>
     <div id="simhost"></div>`;
   $("modal").classList.add("show");
   $("mclose").onclick = closeModal;
   $("mrestart").onclick = confirmRestart;
   $("mcopylog").onclick = copyLog;
-  // Test mode only: one tap, one tick, and a line saying what the phone did
-  // with it, so the haptic can be checked without walking to a gate and a
-  // silent phone says why. Under it, the other ways of asking, because the
-  // phone cannot be felt from here and the owner can say which one works.
-  if ($("mtick")) {
-    $("mtick").onclick = () => {
-      const r = haptic();
-      $("tickinfo").textContent = hapticReport(r);
-      $("tickinfo").hidden = false;
-    };
-    const say = (msg) => { $("tickinfo").textContent = msg; $("tickinfo").hidden = false; };
-    $("tickvariants").querySelector('[data-tick="B"]').onclick = () =>
-      say(`B: off-screen switch ${tickBodySwitch() ? "toggled" : "did not toggle"}.`);
-    $("tickvariants").querySelector('[data-tick="C"]').onclick = () => {
-      const sw = $("tickvisible"), was = sw.checked;
-      sw.closest("label").click();
-      say(`C: visible switch ${sw.checked !== was ? "toggled by script" : "did not toggle"}.`);
-    };
-  }
+  // Test mode only: the tap itself is the tick, like every tap, and this
+  // shows what the phone did with it, so a silent phone says why.
+  if ($("mtick")) $("mtick").onclick = () => {
+    $("tickinfo").textContent = hapticReport(lastTick || { vibrate: "none" });
+    $("tickinfo").hidden = false;
+  };
   if (TESTING) $("simhost").appendChild(simControls());
 }
 
@@ -1470,6 +1473,7 @@ function focusCurrent() {
 }
 
 /* ---- wiring ---- */
+armTicks(document.body);          // the buttons that were here before the observer
 $("menubtn").onclick = openMenu;
 $("restartbtn").onclick = confirmRestart;
 $("restartbtn").hidden = !(HUNT && HUNT.test_mode);
@@ -1536,8 +1540,9 @@ function renderIntro() {
   if (TESTING) SIM = LS.get("sim", null);
   else { SIM = null; LS.del("sim"); }
 
-  // Begin ticks: the same tick as a correct answer, inside the tap.
-  $("startbtn").onclick = () => { haptic(); beginWalk(); };
+  // Begin ticks like every other tap: the switch under the finger, and the
+  // capture-phase vibration, both before this runs.
+  $("startbtn").onclick = () => beginWalk();
   if (LS.get("started", false)) beginWalk();
   else renderIntro();
 })();

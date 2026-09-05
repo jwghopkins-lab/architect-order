@@ -51,7 +51,6 @@
     for (const k in attrs) n.setAttribute(k, attrs[k]);
     return n;
   }
-  function haptic() { if (typeof window.haptic === "function") window.haptic(); }
 
   /* ---- styles, injected once so the player stays one file of markup ---- */
   function injectStyle() {
@@ -194,10 +193,10 @@
       note("Working from the photo you chose. Everything else is the same.");
     };
     root.querySelector("#matchlog").onclick = logSample;
-    // The tick has to happen inside the tap, before anything else. Closing
-    // and continuing come after it in the same handler, never after an await.
+    // The tick happens on the tap itself, before this runs: the switch under
+    // the finger on iPhone, the player's capture-phase vibration elsewhere.
+    // Closing and continuing follow in the same handler, never after an await.
     root.querySelector("#matchgo").onclick = () => {
-      haptic();
       const done = cfg.opts.onProgress;
       close();
       if (done) done();
