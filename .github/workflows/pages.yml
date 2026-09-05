@@ -1,0 +1,44 @@
+name: pages
+
+# Which hunt is published. This is the one line the owner edits to switch
+# hunts; everything else in this file is the same for any of them.
+env:
+  HUNT: content/fixture.json
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the site
+        run: python3 pipeline/build.py "$HUNT"
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify the DEPLOYED url, not the local build
+        run: |
+          sleep 10
+          curl -sSf "${{ steps.deployment.outputs.page_url }}" -o /dev/null
+          echo "live: ${{ steps.deployment.outputs.page_url }}"

@@ -1,0 +1,23 @@
+{
+  "id": "fixture",
+  "title": "The Architect Order — fixture hunt",
+  "intro": [
+    {"type": "text", "text": "THIS IS A FIXTURE. Nothing here is real."}
+  ],
+  "outro": [
+    {"type": "text", "text": "End of the fixture."}
+  ],
+  "diary_mm": {"w": 148, "h": 210},
+  "stops": [
+    {
+      "id": "placeholder",
+      "chapter": "Fixture",
+      "title": "Skeleton",
+      "body": [{"type": "text", "text": "The engine is being built."}],
+      "gate": null,
+      "question": null,
+      "after": [],
+      "lens": null
+    }
+  ]
+}
