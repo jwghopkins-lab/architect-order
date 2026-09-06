@@ -16,7 +16,7 @@
     {
       "id": "first",
       "chapter": "Location one",
-      "reveal": {"at_m": 500, "chapter": "Westminster"},
+      "reveal": {"at_m": 0, "chapter": "Westminster"},
       "body": [
         {"type": "text",
          "text": "Go to the place where fire burned the length of England. Then find this building."},
