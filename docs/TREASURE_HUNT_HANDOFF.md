@@ -15,6 +15,8 @@ is passed the page says Congratulations and the clock stops. A stencil may
 carry a clue and the place it was taken, which give a line of text and a
 distance and bearing under the camera, and a hunt may carry a map of where
 its photographs were taken, or a hand-drawn one for a small or indoor hunt.
+Players give a name once, and their finishing times go to a leaderboard on
+Supabase that every phone can see.
 
 The owner will use the session that builds this to create a series of hunts:
 for each, a name and six to nine photographs. Section 9 says what to do with
@@ -164,6 +166,16 @@ The photographs themselves live in `photos/<slug>/` and that directory is
 gitignored. They give the answers away, the stencils are derived from them,
 and the repository is public because Pages is.
 
+One more file, `content/supabase.json`, committed:
+
+    {"url": "https://<project>.supabase.co", "anon_key": "<the anon key>"}
+
+It is written by the session when it creates the Supabase project
+(section 12) and baked into every hunt's page and the capture page. The
+anon key is public by design; what it can do is fixed by the policies in
+section 12, not by hiding it. If the file is absent, the build succeeds
+without the leaderboard, the name prompt, or the capture upload.
+
 ## 4. The build and the site
 
     python3 pipeline/build.py content/trafalgar.json site/trafalgar
@@ -177,17 +189,33 @@ build script takes `--index` for that, or a second small script), publishes
 stencils, a map image if there is one, and `vendor/leaflet/` only for a
 hunt with a `bounds` map.
 
-Also build `site/capture/index.html`, a page that opens the back camera with
-exactly the `getUserMedia` request the game makes, shows it with the same
-letterboxing, and has one shutter button that downloads the current frame
-as a JPEG at the stream's own resolution (draw the video onto a canvas of
-`videoWidth × videoHeight`, `toBlob`, an `<a download>`). It is how the
-owner should take the hunt photographs: through the same lens and crop the
-game will see, on the phone that will play, so the photograph and the live
-view have the same framing by construction. Section 10 says why. This page
-is the architect-order session's addition, not the owner's request; it is
-here to protect the one mechanic the game rests on, and it is separate from
-the game, so nothing in the game gains a word by it.
+Also build `site/capture/index.html`, the page the owner takes the hunt
+photographs with. It opens the back camera with exactly the `getUserMedia`
+request the game makes and shows it with the same letterboxing, so a
+photograph taken here has the framing the game will later look through, on
+the phone that took it, by construction. Section 10 says why. On it:
+
+- A text box for the hunt's slug, remembered in localStorage, so it is typed
+  once per hunt. A text box for a clue, optional, one line, cleared after
+  each shot. Placeholders `hunt` and `clue`, no other words.
+- One shutter button. It draws the video onto a canvas of
+  `videoWidth × videoHeight`, makes a JPEG at quality 0.92 with `toBlob`,
+  and uploads it to Supabase Storage, bucket `captures`, at
+  `<slug>/<time>-<16 random hex>.jpg`, then inserts a row in the
+  `captures` table: `hunt`, `path`, `clue` (null if empty), and the last
+  usable fix, `lat`, `lon`, `accuracy` (null if none), from a
+  `watchPosition` the page runs while open, so the place the photograph was
+  taken travels with it. A brief green flash on success, a red one with the
+  error's message on failure, and a count of shots this session under the
+  button. Nothing else.
+- With no `content/supabase.json`, the shutter downloads the JPEG to the
+  phone instead (`<a download>`) and the row is not written.
+
+The session then collects a hunt's photographs from Supabase (section 9);
+the owner never has to move a file. This page is the architect-order
+session's addition, not the owner's request; it is here to protect the one
+mechanic the game rests on, and it is separate from the game, so nothing
+in the game gains a word by it.
 
 ## 4a. State, on the phone
 
@@ -205,6 +233,14 @@ the key, so the clock goes back to `0:00` and every tile to untouched.
 A reload changes nothing: the page is rebuilt from `state`.
 
 ## 5. The main screen
+
+Before it, once: if `content/supabase.json` was baked in and no name is
+stored on the phone, a screen with the hunt's name in the wordmark, one
+text box with the placeholder `Your name`, and one button, `Play`, disabled
+until something is typed. The name, trimmed, at most 24 characters, goes in
+localStorage under `treasure.name` (not namespaced by hunt: one phone, one
+player, every hunt) and the main screen follows. It is never asked again,
+and Start over does not clear it.
 
 Top to bottom, and nothing that is not listed:
 
@@ -230,6 +266,9 @@ Top to bottom, and nothing that is not listed:
   about 28 px with a white tick. A passed tile is inert: its tap ticks like
   any tap and opens nothing. Every other tile opens the camera screen.
 - Once every stencil has passed, one line under the grid: `Congratulations!`
+  and, with Supabase baked in, under it the player's own finishing time and
+  the leaderboard (section 12): a plain list, rank, name, time, the
+  player's own row marked with the accent colour, the fastest fifty.
 
 No words anywhere else on this screen. No stencil is numbered. The stencil
 PNGs are the thumbnails, so they are already loaded when the camera needs
@@ -386,32 +425,41 @@ ordinary taps. Keep `hapticReport` reachable from the menu only when
 
 ## 9. Creating a hunt, which the owner will do in the session
 
-The owner gives a name and six to nine photographs; clues for some or none
-of them; coordinates for some, all or none of them, each as a latitude and
-longitude of where the photograph was taken; and either nothing for the
-map, or a hand-made map image for a small or indoor hunt. The session:
+The owner gives a name and a slug, and either says the photographs were
+taken with the capture page under that slug, or uploads six to nine
+photographs to the session; clues for some or none of them, unless they
+were typed on the capture page; coordinates for some, all or none, unless
+the capture page recorded them; and either nothing for the map, or a
+hand-made map image for a small or indoor hunt. The session:
 
-1. Saves the photographs to `photos/<slug>/<id>.jpg`, gitignored. A
-   hand-made map goes to `app/img/<slug>/map.jpg` (or `.png`), committed.
+1. Gets the photographs. From the capture page: `select * from captures
+   where hunt = '<slug>' order by taken_at` through the Supabase tools,
+   download each `path` from the bucket's public URL, and take the row's
+   clue and, where `accuracy` is at most 75, its `lat`/`lon` as the
+   stencil's `location`; read the rows back to the owner (time, clue,
+   accuracy) so a bad shot can be dropped and a location overridden. From
+   an upload: the files as given. Either way they are saved to
+   `photos/<slug>/<id>.jpg`, gitignored. A hand-made map goes to
+   `app/img/<slug>/map.jpg` (or `.png`), committed.
 2. Runs `pipeline/stencil.py` on them and looks at every preview, tuning or
    asking for a replacement where a stencil is noise.
 3. Writes `content/<slug>.json` with the name, the stencils in the order
-   given, the clues exactly as given, and each `location` as given. If any
-   stencil has a location and there is no hand-made map, adds
-   `map.bounds`: the smallest box round every location, widened by about
-   150 m on each side, rounded to four decimal places. If there is a
-   hand-made map, `map.image` instead, and the locations are still kept on
-   the stencils for the distance line only if the owner gave them.
+   given, the clues exactly as given, and each `location`. If any stencil
+   has a location and there is no hand-made map, adds `map.bounds`: the
+   smallest box round every location, widened by about 150 m on each side,
+   rounded to four decimal places. If there is a hand-made map, `map.image`
+   instead, and the locations are still kept on the stencils for the
+   distance line.
 4. Builds, runs the tests (section 11) including the fake-camera pass for
    every stencil of the new hunt, commits the stencils and the hunt file,
    pushes to `main`, waits for the Pages run, and reports the hunt's URL,
    a contact sheet of the stencils over their photographs, and a screenshot
    of the map screen as it opens.
 
-The photographs should be taken with the capture page on the phone that
-will play, in portrait, without zooming. If they were taken with the camera
-app instead, say so in the report: they will still work if the camera app
-was at 1× on the main lens, with more reliance on the scale search.
+The photographs should be taken with the capture page, in portrait, on a
+phone like the ones that will play. If they were taken with the camera app
+instead, say so in the report: they will still work if the camera app was
+at 1× on the main lens, with more reliance on the scale search.
 
 ## 10. Known risk, stated so it is not rediscovered
 
@@ -420,10 +468,14 @@ same field of view: on iPhone in particular the stream can be a crop of what
 the Camera app captures, or the reverse. The stencil is fixed, so a scale
 difference between the photograph and the live view cannot be corrected by
 the player. That is why the capture page exists and is the recommended way
-to take the photographs, and why the scale search runs to ±10%. If field
-tests show a systematic scale difference for camera-app photos, the fix is
-a per-hunt `scale` in the hunt file applied to every stencil, not a wider
-search.
+to take the photographs: it removes the app-versus-browser difference
+entirely. What it cannot remove is the difference between phones: main
+cameras run from about 24 to 28 mm equivalent, so a photograph from one
+phone can be up to about 15% wider or tighter on another. That is what the
+scale search is for, at ±10% by default; if field tests on a second phone
+show it is not enough, widen `MATCH_SCALES` to `[0.85, 1, 1.15]` or add a
+fourth and fifth scale, and if a whole hunt is off on every phone, a
+per-hunt `scale` in the hunt file applied to every stencil.
 
 ## 11. Tests, before anything is pushed
 
@@ -469,32 +521,115 @@ so a later session can run them; they are not part of the site. At least:
   the progress meter; all passed shows Congratulations and freezes the clock.
 - Every tap ticks inside the tap; the pass fires the strong pattern; a tap
   on the wash is strong; a tile tap is a single pulse.
-- Start over confirms, then forgets everything including the clock.
+- Start over confirms, then forgets everything including the clock, and
+  keeps the name.
+- The name screen appears once, refuses an empty name, stores the trimmed
+  name, and is not shown on the next load; the board and the post behave as
+  section 12's stubs describe.
+- The capture page, with the fake camera and a stubbed Supabase: the
+  shutter uploads a JPEG of the stream's size to the expected path and
+  inserts a row with the slug, the clue, and the mocked position; with the
+  config absent it downloads instead.
 - Test mode off: no Skip anywhere.
 - `stencil.py` on a checked-in sample photo produces a stencil the scorer
   passes against that photo, and a blank image produces an empty stencil
   with a clear message rather than a crash.
 
-## 12. The leaderboard
+## 12. The leaderboard, on Supabase
 
-Not built, and this is why. A leaderboard of everybody who has completed
-the hunt has to be readable by every phone, so the completions have to be
-stored somewhere every phone can reach. That is a shared store, which is a
-database whatever it is called: GitHub Pages serves files and cannot accept
-a write, and every hosted alternative is a database with a key. The owner
-asked for this feature only if it could be done without one, so it is left
-out, and with it the display-name prompt, which existed only to feed it.
+A leaderboard every phone can read needs a store every phone can reach.
+GitHub Pages cannot take a write, so the store is Supabase, and the session
+sets it up itself through the Supabase connector, which must be enabled for
+the session. A new project, so nothing of the owner's other projects is
+touched:
 
-The nearest thing that needs no store is a board of the players who have
-completed the hunt on that one phone, which is nearly always one player.
-Say in the report that it was left out and why.
+1. `list_organizations`, then `get_cost` for a project and `confirm_cost`,
+   then `create_project` named `treasure-hunt` in the London region (or the
+   nearest offered), on the free tier if the organization allows it; wait
+   for it to be active with `get_project`.
+2. `apply_migration` with the schema below, then `get_advisors` for
+   security and fix anything it raises.
+3. `get_project_url` and `get_publishable_keys` for the anon key, written
+   to `content/supabase.json` (section 3).
+
+The schema:
+
+    create table completions (
+      id uuid primary key default gen_random_uuid(),
+      run_id uuid not null unique,
+      hunt text not null check (length(hunt) between 1 and 40),
+      name text not null check (length(name) between 1 and 24),
+      ms integer not null check (ms between 1000 and 86400000),
+      created_at timestamptz not null default now()
+    );
+    create index on completions (hunt, ms);
+    alter table completions enable row level security;
+    create policy "anyone may post a completion" on completions
+      for insert to anon with check (true);
+    create policy "anyone may read the board" on completions
+      for select to anon using (true);
+
+    create table captures (
+      id uuid primary key default gen_random_uuid(),
+      hunt text not null check (length(hunt) between 1 and 40),
+      path text not null,
+      clue text check (length(clue) <= 200),
+      lat double precision, lon double precision, accuracy double precision,
+      taken_at timestamptz not null default now()
+    );
+    alter table captures enable row level security;
+    create policy "the capture page may post" on captures
+      for insert to anon with check (true);
+    -- no select for anon: the rows say where the answers are, and only the
+    -- session reads them, through the connector.
+
+    insert into storage.buckets (id, name, public, file_size_limit,
+                                 allowed_mime_types)
+      values ('captures', 'captures', true, 8000000, '{image/jpeg}');
+    create policy "the capture page may upload" on storage.objects
+      for insert to anon with check (bucket_id = 'captures');
+    -- public read, unguessable names: the path carries sixteen random hex
+    -- characters, and nothing lists the bucket.
+
+Anyone with the URL can insert a row; the checks bound what a row can be,
+and that is the whole of the protection, which is right for a game among
+friends. `run_id` is made on the phone once per run and stored in `state`,
+so a retry after a failed post cannot make a second row.
+
+In the page, with the config baked in:
+
+- On the pass of the last stencil, `POST <url>/rest/v1/completions` with
+  headers `apikey`, `Authorization: Bearer <anon key>`, `Content-Type:
+  application/json`, `Prefer: return=minimal`, and body `{run_id, hunt,
+  name, ms}` where `ms` is `max(done) − startedAt`. On success set
+  `state.posted = true`. A 409 (the `run_id` is already there) counts as
+  success.
+- Then, and on every load of a finished walk, `GET
+  <url>/rest/v1/completions?hunt=eq.<id>&select=name,ms&order=ms.asc&limit=50`
+  and render the board under `Congratulations!`. If `posted` is not set,
+  post first and fetch after, so a reload after a failed post, offline
+  say, adds the completion and shows it. The player's own row is found by
+  `run_id` in the fetch (`select=run_id,name,ms`) and marked.
+- While a request is in flight or after it fails, the board area is simply
+  empty; no spinner, no error text. Load and post use `fetch` with a 10 s
+  `AbortController` timeout.
+
+Times on the board are `m:ss` or `h:mm:ss`, the same as the clock.
+
+Tests (section 11) intercept the Supabase URL with Playwright's
+`page.route`: a stubbed POST that succeeds, one that fails then succeeds on
+reload, a stubbed GET with a few rows including the player's `run_id`, and
+a build without `content/supabase.json` that has no name screen, no board
+and makes no request.
 
 ## 13. Report
 
 When the app is built: the Pages URL, the test counts, what was taken from
-architect-order and what was changed in it, the leaderboard decision, the
-capture page's URL with the advice to take the hunt photographs with it,
-and what each hunt needs from the owner: the name, the photographs, and
-for each photograph an optional clue and an optional latitude and
-longitude, plus an optional hand-made map image. Then wait for the first
+architect-order and what was changed in it, the Supabase project's name
+and region and that it is new, the capture page's URL with how to use it
+(type the hunt's slug once, a clue if wanted, tap the shutter at each
+place; the photograph, the clue and the position go up by themselves), and
+what each hunt then needs from the owner: the name and the slug, and a
+hand-made map image if wanted; or, without the capture page, the
+photographs with optional clues and coordinates. Then wait for the first
 hunt.
