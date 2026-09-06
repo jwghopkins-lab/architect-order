@@ -4,7 +4,7 @@ name: pages
 # to /fixture/. These two lines are the ones the owner edits to switch hunts;
 # everything else in this file is the same for any of them.
 env:
-  HUNT: content/architect-order.json
+  HUNT: content/architect-order.md
   FIXTURE: content/fixture.json
 
 on:

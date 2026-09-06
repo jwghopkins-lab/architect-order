@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Validate a hunt and bake it into the player.
 
+    python3 pipeline/build.py content/architect-order.md
     python3 pipeline/build.py content/fixture.json
+
+A hunt is either narrative Markdown, which is the readable way to write one,
+or JSON, which is the same thing with the prose in quotes. Both arrive here
+as the same structure and are validated and baked identically.
 
 Standard library only, on purpose: the whole point of this game is that it is
 a static page anybody can serve, so the thing that produces it should not need
@@ -15,6 +20,11 @@ import json
 import shutil
 import sys
 from pathlib import Path
+
+# The reader sits beside this file rather than inside it, and running a script
+# does not always put its own directory on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import narrative  # noqa: E402
 
 BASE = Path(__file__).resolve().parent.parent
 APP = BASE / "app"
@@ -227,8 +237,20 @@ def validate(hunt):
     return images
 
 
+def load(content_path):
+    """Markdown or JSON, by the name of the file. Same structure either way."""
+    path = Path(content_path)
+    text = path.read_text(encoding="utf-8")
+    if path.suffix.lower() in (".md", ".markdown"):
+        return narrative.parse(text, default_id=path.stem)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as err:
+        fail(str(path), f"line {err.lineno}: {err.msg}")
+
+
 def build(content_path, out_dir):
-    hunt = json.loads(Path(content_path).read_text(encoding="utf-8"))
+    hunt = load(content_path)
     images = validate(hunt)
 
     template = (APP / "player.html").read_text(encoding="utf-8")
@@ -271,11 +293,14 @@ def build(content_path, out_dir):
 
 def main():
     if len(sys.argv) not in (2, 3):
-        print("usage: python3 pipeline/build.py content/<hunt>.json [output dir, default site]",
+        print("usage: python3 pipeline/build.py content/<hunt>.md [output dir, default site]",
               file=sys.stderr)
         return 2
     try:
         build(sys.argv[1], sys.argv[2] if len(sys.argv) == 3 else SITE)
+    except narrative.NarrativeError as err:
+        print(f"{sys.argv[1]} — {err}", file=sys.stderr)
+        return 1
     except ContentError as err:
         print(f"content error — {err}", file=sys.stderr)
         return 1

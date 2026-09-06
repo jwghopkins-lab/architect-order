@@ -12,24 +12,89 @@ something real.
 
 ## Layout
 
+    content/<hunt>.md      real hunts, written as narrative
     content/fixture.json   the fixture hunt: fake stops that exercise every feature
-    content/<hunt>.json    real hunts
     app/player.html        the player template, with one marker line for the hunt
     app/lens.js            the camera overlay
     app/img/               images referenced by content, by relative path
     pipeline/build.py      validate the content, bake it into the page
+    pipeline/narrative.py  read a hunt written as Markdown
     site/                  build output, gitignored
 
 ## Build
 
-    python3 pipeline/build.py content/architect-order.json site
+    python3 pipeline/build.py content/architect-order.md site
     python3 pipeline/build.py content/fixture.json site/fixture
 
-Python 3 standard library only, no npm, no bundler. It validates the hunt and
-exits non-zero naming the stop if anything is wrong, then writes the output
-directory (`site` if none is given): the page, `lens.js`, and only the images
-that hunt refers to. The second directory can sit inside the first, so the
-real hunt is at the site root and the fixture at `/fixture/`.
+Python 3 standard library only, no npm, no bundler. A hunt is either Markdown
+or JSON, by the name of the file, and the two produce the same page. It
+validates the hunt and exits non-zero naming the stop, or the line, if
+anything is wrong, then writes the output directory (`site` if none is given):
+the page, `lens.js`, and only the images that hunt refers to. The second
+directory can sit inside the first, so the real hunt is at the site root and
+the fixture at `/fixture/`.
+
+## Writing the narrative
+
+`content/architect-order.md` is the hunt. All of its words live there, in
+order, and moving a paragraph from one stop to another is moving the words.
+Nothing else has to be touched, and the page is rebuilt from it two ways:
+
+- **On GitHub.** Edit the file in the browser and commit to `main`. The
+  workflow builds and publishes it, and fails the run without publishing if
+  the file no longer reads.
+- **Here.** `python3 pipeline/build.py content/architect-order.md site`, then
+  serve `site` as above.
+
+The whole format:
+
+    # The Architect Order        the hunt's title
+    id: architect-order          optional; the file's name if left out
+    test_mode: yes               optional; see below
+    diary: 148 x 210 mm          optional
+
+    ## Intro                     the words before the walk
+
+    ## Stop: first               one section per stop, walked in this order
+    chapter: Location one        the header on the card
+    title: A second line         optional
+    reveal: Westminster, on the pass
+    gate: 51.4984528, -0.1260286, 40 m, compass, distance
+    lens: stencil img/jewel-tower-stencil.png, auto, match 0.35
+    note: Line the drawing up with the building.
+    marks: 0, 300, 600, 914      a cord lens only
+
+    ### Body                     the words before the gate
+    ### Question
+    ask: What do they lay on the pendulum to keep it to time?
+    answers: PENNIES, PENNY, OLD PENNIES, PENCE, COINS, COPPERS
+    guesses: 3
+    ### After                    the words once the stop is resolved
+
+    ## Outro                     the ending, before the tally
+
+Everything under `### Body`, `### After`, `## Intro` and `## Outro` is prose:
+
+- A **blank line** starts a new paragraph, and each paragraph arrives on its
+  own. A paragraph wrapped over several lines is still one paragraph.
+- **`(same reveal)`** on a line of its own joins the paragraph after it to the
+  one before, so the two arrive together as one.
+- **`(pause 1 s)`** on a line of its own holds the next paragraph back. Also
+  `(pause 400 ms)`. Between a tenth of a second and five seconds.
+- A **picture** is an ordinary Markdown image line, alone, with its caption as
+  the quoted title: `![what it shows](img/thing.png "The caption")`.
+
+The settings lines are `name: value`, and only the names above are understood;
+anything else on those lines is an error rather than a paragraph that quietly
+disappears. After the new chapter, a `reveal` takes `on the pass`, `at 300 m`
+and `title <words>`; a `gate` takes `compass` and `distance` after the radius;
+a `lens` takes `auto`, `match <n>`, `hold <n> ms`, `gated`, `not gated`,
+`fallback <n> s` and `no fallback` after the picture. Commas separate those,
+so a chapter or a stencil note that needs a comma of its own is fine, but an
+answer is not.
+
+JSON hunts still build, and `content/fixture.json` is still one, because it is
+a test rig rather than something anybody reads.
 
 ## Test
 
@@ -46,18 +111,13 @@ The camera and the real gates can only be tested on a phone, at the Pages URL.
 
 ## Stencils and the match
 
-A stencil lens can carry a `match` block, at which point the lens scores how
-well the edges in the camera frame line up with the stencil, several times a
-second, and shows the score as a bar with a Progress button under it. The
-player still lines the stencil up by hand; the code only checks the alignment.
+A stencil lens can carry a match, at which point the lens scores how well the
+edges in the camera frame line up with the stencil, several times a second,
+and shows the score as a bar with a Progress button under it. The player still
+lines the stencil up by hand; the code only checks the alignment.
 
-    "lens": {
-      "kind": "stencil",
-      "src": "img/placeholder-stencil.png",
-      "note": "Line the outline up with the plaque.",
-      "auto": true,
-      "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": null}
-    }
+    lens: stencil img/placeholder-stencil.png, auto, match 0.35, hold 600 ms, gated
+    note: Line the outline up with the plaque.
 
 `auto` means the lens is a step in the stop rather than a tool beside it,
 but the camera always opens from a tap: iOS refuses it otherwise, and a fix
@@ -66,9 +126,10 @@ a lit button opens it. After a gate that button is Continue, which opens the
 lens directly; with no gate it is **Open the camera**, lit when the body
 finishes revealing, a triple tap included. The same button reopens the lens
 if it was closed before Progress.
-`threshold` is the score that counts as matched, `hold_ms` how long it must
-stay there, `gate` whether Progress waits for it, and `fallback_s` how many
-seconds of trying light Progress anyway (null: never). The Log button in the
+The number after `match` is the score that counts as matched, `hold` how long
+it must stay there, `gated` or `not gated` whether Progress waits for it, and
+`fallback <n> s` how many seconds of trying light Progress anyway. Left out,
+those are 0.35, 600 ms, gated, and no fallback. The Log button in the
 lens appends one sample per press to a per-hunt log on the phone; **Copy log**
 in the menu puts it on the clipboard as tab-separated text with a header row.
 
@@ -106,33 +167,33 @@ answer. Those buttons carry `data-strong`; that is the one place to tune.
 
 ## Test mode, the live distance, and a name that resolves
 
-- **`"test_mode": true`** at the top of a hunt turns on every player-facing
+- **`test_mode: yes`** at the top of a hunt turns on every player-facing
   testing affordance: a plain Skip button on every location check, every
   match and every question; the threshold slider in the lens; and a Start
   over button in the bar at the top of the walk that is always on screen.
-  Skipped parts count in the ending as skipped, not wrong. One field: set it
-  false and rebuild before anybody plays for real, and none of them exist.
+  Skipped parts count in the ending as skipped, not wrong. One line: make it
+  `no` and rebuild before anybody plays for real, and none of them exist.
   Start over stays in the menu either way. `#testing` in the address is
   separate: that is the position simulator, a developer tool.
 - **The threshold slider**, test mode only, runs from 0.05 to 0.95 and starts
-  at the stop's `match.threshold`. Moving it moves the tick on the bar and
+  at the stop's match threshold. Moving it moves the tick on the bar and
   changes the pass test at once. The setting is kept per stop on the phone
   while test mode is on, and every Log line records the threshold in force.
-- **`"distance": true`** on a stop with a gate shows the distance to the target
-  from each usable fix while the gate card is open, rounded the way a person
-  would say it. The compass rule is unchanged.
-- **`"reveal": {"at_m": 500, "chapter": "…", "title": "…"}`** on a stop with a
-  gate keeps the stop's written chapter and title until a usable fix reads
-  within `at_m`, then changes them, once, for good. Passing the gate reveals
-  it too. `at_m` defaults to 500, where the compass drops out; `0` means only
-  on the pass. On a stop with no gate, a `reveal` applies when Progress is
-  pressed on the stop's match. At least one of `chapter` or `title` is
-  required.
+- **`distance`** on a gate line shows the distance to the target from each
+  usable fix while the gate card is open, rounded the way a person would say
+  it. The compass rule is unchanged.
+- **`reveal: Westminster, at 500 m, title …`** on a stop with a gate keeps the
+  stop's written chapter and title until a usable fix reads within that
+  distance, then changes them, once, for good. Passing the gate reveals it
+  too. The distance defaults to 500 m, where the compass drops out; `on the
+  pass` means only on the pass. On a stop with no gate, a reveal applies when
+  Progress is pressed on the stop's match. At least one of the new chapter and
+  the new title is required.
 - A stop's **`title` is optional**; the card shows the chapter as its header
   and a title only if there is one. Nothing on a card or the opening counts
-  the stops. A `gate.prompt` is accepted and not shown.
-- **`{"type": "pause", "ms": 1000}`** in any block list holds the next block
-  back by that long, between 100 and 5000 ms. It renders nothing.
+  the stops. A `gate.prompt` in an older JSON hunt is accepted and not shown.
+- **`(pause 1 s)`** in any run of prose holds the next paragraph back by that
+  long, between 100 and 5000 ms. It renders nothing.
 - **Finishing a reveal** is three taps within a second and a half on the text
   that is arriving. One or two taps do nothing.
 
