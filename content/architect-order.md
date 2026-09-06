@@ -6,9 +6,9 @@ finale: SMYTH EDINBURGH
 
 ## Intro
 
-If you're reading this it means we have triggered a distress signal which sent the link that brought you here.
+If you're reading this it means I have triggered a distress signal which sent the link that brought you here.
 
-As you know, we recovered Arthur's diary which holds the key to all of this. In case anything should happen to us, I'm digitising important elements of it here so you can follow. You'll need to continue your research to piece it together, I just hope we've got far enough that you can finish the job and solve it. Everything is behind real world location and image gates; it's our only remaining way to document our findings and still keep it hidden from them.
+As you know, I recovered Arthur's diary which holds the key to all of this. In case anything should happen to us, I'm digitising important elements of it here so you can follow. You'll need to continue your research to piece it together, I just hope we've got far enough that you can finish the job and solve it. Everything is behind real world location and image gates; it's our only remaining way to document our findings and still keep it hidden from them.
 
 ## Stop: first
 
