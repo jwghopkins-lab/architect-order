@@ -163,15 +163,61 @@ def check_lens(lens, where, images):
 
 
 def check_reveal(r, where):
-    """A name that resolves on approach. Needs somewhere to approach."""
+    """A name that resolves. With at_m, on the approach to a gate: zero means
+    on the pass rather than at a distance. Without it, when the stop is
+    finished, whatever finishes it."""
     if not isinstance(r, dict):
         fail(where, "reveal must be an object")
-    # Zero means "on the pass" rather than at a distance.
-    at = r.setdefault("at_m", 500)
-    if not is_num(at) or at < 0:
+    at = r.get("at_m")
+    if at is not None and (not is_num(at) or at < 0):
         fail(where, f"reveal at_m is {at!r}, must be 0 or a number of metres")
     if not str(r.get("chapter") or "").strip() and not str(r.get("title") or "").strip():
         fail(where, "reveal needs a chapter or a title to change to")
+
+
+def check_letters(letters, where):
+    """What a finished stop leaves on its card: capitals, and whether the
+    player sees them in order."""
+    if not isinstance(letters, dict):
+        fail(where, "letters must be an object")
+    text = str(letters.get("text") or "").upper()
+    if not text.strip():
+        fail(where, "letters has no letters")
+    if any(not ("A" <= ch <= "Z" or ch == " ") for ch in text):
+        fail(where, f"letters {text!r} must be capital letters A to Z, and spaces")
+    letters["text"] = text
+    scrambled = letters.setdefault("scrambled", False)
+    if not isinstance(scrambled, bool):
+        fail(where, f"letters scrambled is {scrambled!r}, must be true or false")
+
+
+def check_finale(hunt):
+    """The ending rearranges every stop's letters into the finale, so the two
+    have to be the same letters, and it is far better to hear that here than
+    to watch a letter with nowhere to go on a phone at the end of a walk."""
+    finale = hunt.get("finale")
+    letters = "".join(s["letters"]["text"] for s in hunt["stops"] if s.get("letters"))
+    if finale is None:
+        return
+    finale = str(finale).upper()
+    if not finale.strip() or any(not ("A" <= ch <= "Z" or ch == " ") for ch in finale):
+        fail("hunt.finale", f"{finale!r} must be capital letters A to Z, and spaces")
+    hunt["finale"] = finale
+    if not letters:
+        fail("hunt.finale", "there is a finale but no stop leaves any letters behind")
+    have, want = sorted(letters.replace(" ", "")), sorted(finale.replace(" ", ""))
+    if have != want:
+        missing = list(want)
+        for ch in have:
+            if ch in missing:
+                missing.remove(ch)
+        extra = list(have)
+        for ch in want:
+            if ch in extra:
+                extra.remove(ch)
+        fail("hunt.finale", f"the stops leave {letters.replace(' ', '')!r}, which does not "
+                            f"rearrange into {finale!r}: missing {''.join(missing) or 'nothing'}, "
+                            f"left over {''.join(extra) or 'nothing'}")
 
 
 def validate(hunt):
@@ -223,17 +269,28 @@ def validate(hunt):
             fail(where, "compass is on but there is no gate to point at")
         if s.get("distance") and not gate:
             fail(where, "distance is on but there is no gate to measure to")
+        if s.get("compass_min_m") is not None:
+            if not s.get("compass"):
+                fail(where, "compass_min_m is set but the compass is not on")
+            if not is_num(s["compass_min_m"]) or s["compass_min_m"] < 0:
+                fail(where, f"compass_min_m is {s['compass_min_m']!r}, must be 0 or a number of metres")
         if s.get("reveal") is not None:
-            # A name resolves on the approach to a gate, or, with no gate, on
-            # Progress in a match. It needs one or the other to happen on.
-            lens = s.get("lens") or {}
-            if not gate and not (lens.get("kind") == "stencil" and lens.get("match") is not None):
-                fail(where, "reveal needs a gate to approach or a match to press Progress on")
             check_reveal(s["reveal"], where)
+            lens = s.get("lens") or {}
+            match = lens.get("kind") == "stencil" and lens.get("match") is not None
+            # On the approach, a name needs a gate to approach. On the finish,
+            # it needs something that finishes: a match, a question or a gate.
+            if s["reveal"].get("at_m") is not None and not gate:
+                fail(where, "reveal at a distance needs a gate to approach")
+            if s["reveal"].get("at_m") is None and not (match or s.get("question") or gate):
+                fail(where, "reveal needs a match, a question or a gate to finish on")
         if s.get("question"):
             check_question(s["question"], where)
         if s.get("lens"):
             check_lens(s["lens"], where, images)
+        if s.get("letters") is not None:
+            check_letters(s["letters"], where)
+    check_finale(hunt)
     return images
 
 
@@ -288,7 +345,8 @@ def build(content_path, out_dir):
           f"{sum(1 for s in hunt['stops'] if s.get('gate'))} gates, "
           f"{sum(1 for s in hunt['stops'] if s.get('question'))} questions, "
           f"{sum(1 for s in hunt['stops'] if s.get('lens'))} lenses, "
-          f"{len(set(images))} images, test mode {'on' if hunt['test_mode'] else 'off'}")
+          f"{len(set(images))} images, test mode {'on' if hunt['test_mode'] else 'off'}"
+          + (f", finale {hunt['finale']!r}" if hunt.get("finale") else ""))
 
 
 def main():

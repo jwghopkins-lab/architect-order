@@ -2,6 +2,7 @@
   "id": "fixture",
   "title": "The Architect Order — fixture hunt",
   "test_mode": true,
+  "finale": "FIXTURE",
   "diary_mm": {"w": 148, "h": 210},
   "intro": [
     {
@@ -195,7 +196,8 @@
         "note": "FIXTURE. Line the rectangle up with a doorway or a window. Watch the bar.",
         "auto": true,
         "match": {"threshold": 0.35, "hold_ms": 600, "gate": false, "fallback_s": null}
-      }
+      },
+      "letters": {"text": "FIX", "scrambled": true}
     },
     {
       "id": "fixture-calibrate-gated",
@@ -227,7 +229,8 @@
         "note": "FIXTURE. Line the rectangle up. Progress stays grey until it matches, or until 45 seconds have gone.",
         "auto": true,
         "match": {"threshold": 0.35, "hold_ms": 600, "gate": true, "fallback_s": 45}
-      }
+      },
+      "letters": {"text": "TURE"}
     }
   ]
 }

@@ -2,6 +2,7 @@
 id: architect-order
 test_mode: yes
 diary: 148 x 210 mm
+finale: SMYTH EDINBURGH
 
 ## Intro
 
@@ -12,7 +13,7 @@ As you know, we recovered Arthur's diary which holds the key to all of this. In 
 ## Stop: first
 
 chapter: Location one
-reveal: Westminster, on the pass
+reveal: Jewel Tower
 gate: 51.4984528, -0.1260286, 40 m, compass, distance
 lens: stencil img/jewel-tower-stencil.png, auto, match 0.35, hold 600 ms, gated
 note: Line the drawing up with the building.
@@ -25,7 +26,7 @@ Go to the place where fire burned the length of England. Then find this building
 
 ### After
 
-In 1834 the Palace of Westminster burned down. The brass bar that defined the length of England's unit of measure, the imperial yard, was lost in the fire. The building in front of you is the Jewel Tower. From 1869 this is where the nation's weights and measures were tested against the new standards, until the vibration of traffic made precise measurement impossible.
+In 1834 the Palace of Westminster burned down. The brass bar that defined the length of England's unit of measure, the imperial yard, was lost in the fire. The building in front of you is the Jewel Tower. From 1869 this is where the nation's weights and measures were tested against the new standards.
 
 (same reveal)
 
@@ -35,6 +36,8 @@ Forty bronze bars were cast to replace what had burned. The best became the stan
 
 It is said that the fire was started by the Clerk of Works burning two cartloads of old willow tally sticks in stoves meant for coal, but this is not true. The fire was set deliberately, and something else was lost that night that is not documented.
 
+The only public copy of Sir Isaac Newton's private notes on the Great Pyramid and the sacred cubit.
+
 ## Stop: second
 
 chapter: Location two
@@ -43,8 +46,6 @@ lens: stencil img/abbey-west-front-stencil.png, auto, match 0.35, hold 600 ms, g
 note: Line the drawing up with the front of the Abbey.
 
 ### Body
-
-The only public copy of Sir Isaac Newton's private notes on the Great Pyramid and the sacred cubit.
 
 Arthur's recovered notes contain Newton's private working papers from the 1680s, cross-referencing John Greaves's Pyramidographia. Rather than mystical prophecies, they show a rigorous, obsessive attempt to reverse-engineer the ancient Egyptian Memphis cubit and the Jewish sacred cubit using raw architectural dimensions. The missing folios detail calculations converting pyramid chamber heights into English inches, hunting for a mathematical link between ancient temple layouts and contemporary mint standards.
 
@@ -63,7 +64,7 @@ note: Line the drawing up with the tower.
 
 George Airy. Astronomer Royal for forty-six years. Arthur's notes come back to him more than to anyone else.
 
-After the fire, Airy chaired the commission that decided what the new yard would be. When they built this tower, Airy wrote the specification for its clock: the first stroke of every hour true to within one second, checked twice a day by telegraph to his observatory at Greenwich. It is kept to time with old pennies laid on the pendulum. One penny is worth two fifths of a second a day. And at Greenwich, in 1851, he set the instrument that fixes the line the world's time is measured from.
+After the fire, Airy chaired the commission that decided what the new yard would be. When they built this tower, Airy wrote the specification for its clock: the first stroke of every hour true to within one second, checked twice a day by telegraph to his observatory at Greenwich. And at Greenwich, in 1851, he set the instrument that fixes the line the world's time is measured from.
 
 (pause 1 s)
 
@@ -83,6 +84,47 @@ guesses: 3
 
 Twice a day, this clock's performance went down the wire to Greenwich, where Airy's line runs through the floor of his observatory. Since 1884 the world has measured its time from that line. Arthur went there. We haven't, yet.
 
+## Stop: fourth
+
+chapter: Location four
+reveal: The Bronze Yard
+gate: 51.5083460, -0.1276292, 40 m, compass throughout, distance
+lens: stencil img/imperial-standards-stencil.png, auto, match 0.35, hold 600 ms, gated
+note: Line the frame up with the plaque.
+letters: MYBURGH, scrambled
+
+### Body
+
+One of the bronze yards lies in plain sight to the North of here. Find Cunningham and Beatty and you will find it. Study the sign below.
+
+## Stop: fifth
+
+chapter: Location five
+reveal: The Lion's paw
+letters: DE
+
+### Body
+
+Find Napier, then proceed to closest of Landseer's creations. Align its front paw with the Westernmost column of the gallery. Along that line, beside the column you will find beneath your feet an engraving. Take the last two letters.
+
+### Question
+
+ask: What are the last two letters?
+answers: DE, D E
+guesses: 3
+
+## Stop: sixth
+
+chapter: Location six
+reveal: The Camel's Head
+lens: stencil img/standard-chain-stencil.png, auto, match 0.35, hold 600 ms, gated
+note: Line the frame up with the plaque.
+letters: STHIN, scrambled
+
+### Body
+
+Proceeding from the Camel's Head, descend 35 levels exactly towards Whitehall, and turn 90 degrees right. Find another measure.
+
 ## Outro
 
-[Outro to come.]
+…to be continued.

@@ -17,17 +17,21 @@ The format, in full:
     id: architect-order            optional, defaults to the file's name
     test_mode: yes                 optional, defaults to no
     diary: 148 x 210 mm            optional
+    finale: SMYTH EDINBURGH        optional: what the stops' letters spell
 
     ## Intro                       prose, arrives before the walk
     ## Outro                       prose, arrives at the end
     ## Stop: <id>                  one per stop, in the order they are walked
     chapter: Location one          the header on the card
     title: ...                     optional second line on the card
-    reveal: Westminster, on the pass
+    reveal: Jewel Tower            the name once the stop is finished; or
+    reveal: Westminster, at 300 m  on the approach, or `on the pass`
     gate: 51.4984528, -0.1260286, 40 m, compass, distance
+    gate: ..., compass throughout  a compass that stays to the door
     lens: stencil img/x.png, auto, match 0.35
     note: Line the drawing up with the building.
     marks: 0, 300, 600, 914        a cord lens only
+    letters: MYBURGH, scrambled    what the stop leaves behind, and how
     ### Body                       prose, before the gate
     ### After                      prose, once the stop is resolved
     ### Question
@@ -40,6 +44,10 @@ its own. A line reading (same reveal) joins the paragraph after it to the one
 before, so they arrive together. A line reading (pause 1 s) holds the next
 paragraph back. A picture is an ordinary Markdown image line, alone on its
 line, with its caption as the quoted title.
+
+A reveal with no distance after it is the name the card takes when the stop
+is finished: at Progress on its match, or at its question, or at its gate,
+whichever of those it has, in that order.
 """
 
 import re
@@ -67,8 +75,8 @@ HOLD = re.compile(r"^hold\s+(\d+(?:\.\d+)?)\s*ms$", re.I)
 FALLBACK = re.compile(r"^fallback\s+(\d+(?:\.\d+)?)\s*s$", re.I)
 MATCH = re.compile(r"^match(?:\s+(\d*\.?\d+))?$", re.I)
 
-HUNT_KEYS = ("id", "test_mode", "diary")
-STOP_KEYS = ("chapter", "title", "reveal", "gate", "lens", "note", "marks")
+HUNT_KEYS = ("id", "test_mode", "diary", "finale")
+STOP_KEYS = ("chapter", "title", "reveal", "gate", "lens", "note", "marks", "letters")
 QUESTION_KEYS = ("ask", "answers", "guesses")
 
 
@@ -254,12 +262,35 @@ def read_gate(value, line_no):
     gate["radius_m"] = number(radius.group(1), line_no, "gate radius")
     flags = {}
     for part in parts[3:]:
-        if part.lower() in ("compass", "distance"):
-            flags[part.lower()] = True
+        low = part.lower()
+        if low in ("compass", "distance"):
+            flags[low] = True
+        elif low == "compass throughout":
+            # A bearing all the way to the door, where the usual one drops
+            # out at five hundred metres.
+            flags["compass"] = True
+            flags["compass_min_m"] = 0
         else:
-            oops(line_no, f"gate has {part!r}; after the radius only 'compass' "
-                          f"and 'distance' are understood")
+            oops(line_no, f"gate has {part!r}; after the radius only 'compass', "
+                          f"'compass throughout' and 'distance' are understood")
     return gate, flags
+
+
+def read_letters(value, line_no):
+    """`letters: MYBURGH, scrambled`: what a finished stop leaves on its card,
+    and whether the player sees them in order."""
+    parts = [p.strip() for p in value.split(",")]
+    letters = {"text": parts[0].upper()}
+    for part in parts[1:]:
+        low = part.lower()
+        if low == "scrambled":
+            letters["scrambled"] = True
+        elif low == "in order":
+            letters["scrambled"] = False
+        else:
+            oops(line_no, f"letters has {part!r}; after the letters only 'scrambled' "
+                          f"and 'in order' are understood")
+    return letters
 
 
 def read_lens(value, line_no, note, marks):
@@ -389,6 +420,8 @@ def read_stop(section):
         oops(setting["note"][1], "a note belongs to a lens, and this stop has no lens")
     elif "marks" in setting:
         oops(setting["marks"][1], "marks belong to a cord lens, and this stop has no lens")
+    if "letters" in setting:
+        stop["letters"] = read_letters(*setting["letters"])
     if after is not None:
         stop["after"] = after
     return stop
@@ -428,6 +461,8 @@ def parse(text, default_id="hunt"):
             oops(line_no, f"diary is {raw!r}; write it as '148 x 210 mm'")
         hunt["diary_mm"] = {"w": number(found.group(1), line_no, "diary width"),
                             "h": number(found.group(2), line_no, "diary height")}
+    if "finale" in setting:
+        hunt["finale"] = setting["finale"][0].upper()
 
     stops = []
     for section in top:

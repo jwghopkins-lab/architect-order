@@ -115,6 +115,8 @@
   .stext .w.on { opacity: 1; transition: opacity .45s ease; }
   @media (prefers-reduced-motion: reduce) {
     .stext .w { opacity: 1; }
+    .letters.live .tile { opacity: 1; }
+    .finale .fl { opacity: 1; }
   }
   /* A picture is the picture and nothing else: no border, no ground, no
      shadow, no rounded corners. A drawing on torn paper with a transparent
@@ -126,17 +128,36 @@
   .payrule { border-top: 1px solid var(--line); margin: 16px 0 14px; }
   .srow { margin-top: 14px; }
 
-  /* A finished stop collapses to one line: which stop, what happened. Enough to
-     find your way back to its lens, not enough to re-read the whole card. */
-  .past { display: flex; align-items: center; gap: 10px; background: var(--panel);
-          border: 1px solid var(--line); border-left: 3px solid var(--good);
-          border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
-          font-size: .84rem; }
-  .past.miss { border-left-color: var(--warn); }
-  .past .pt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-              white-space: nowrap; }
-  .past .pr { font-size: .74rem; color: var(--ink-soft); white-space: nowrap; }
-  .past .lensbtn { flex: none; }
+  /* A finished stop stays on the page as it was read: its words, its pictures,
+     the answer that was typed and the letters it left behind, all there to
+     scroll back to. What goes is everything that was a control: the check,
+     the camera, the question's box and the buttons. A coloured edge and a
+     word in the header say how it went. */
+  .stop.done { border-left: 3px solid var(--good); }
+  .stop.done.miss { border-left-color: var(--warn); }
+  .shead .pr { margin-left: auto; font-weight: 500; letter-spacing: 0;
+               text-transform: none; font-size: .74rem; }
+
+  /* The letters a stop leaves behind: tiles, in whatever order the content
+     says. They arrive one after another the first time and sit still after. */
+  .letters { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+             margin-top: 14px; }
+  .letters .tile { font-family: Georgia, serif; font-weight: 700; font-size: 1.25rem;
+                   width: 2.2rem; height: 2.5rem; display: flex; align-items: center;
+                   justify-content: center; border: 1px solid var(--line);
+                   border-radius: 6px; background: var(--paper); color: var(--accent); }
+  .letters.live .tile { opacity: 0; animation: tilein .5s ease forwards; }
+  @keyframes tilein { to { opacity: 1; } }
+  /* The ending's one line of letters. Each letter is a span placed in a slot
+     one n-th of the width wide, so that it can slide to a different slot. */
+  .finale { position: relative; height: 2.4em; margin: 6px 0 16px;
+            font-family: Georgia, serif; font-weight: 700;
+            font-size: min(1.3rem, 4.6vw); color: var(--accent); }
+  .finale .fl { position: absolute; top: 0; width: calc(100% / var(--n, 15));
+                text-align: center; line-height: 2.4em; opacity: 0;
+                transition: left 1.6s cubic-bezier(.25,.8,.25,1), opacity .6s ease; }
+  .finale .fl.on { opacity: 1; }
+  .finale .fl.moving { opacity: .3; }
 
   /* The gate: a question of presence, before anything is said. */
   .gatewrap { text-align: center; padding: 4px 2px 2px; margin-top: 14px; }
@@ -203,6 +224,9 @@
   .qverdict { margin-top: 12px; font-family: Georgia, serif; font-size: 1rem; }
   .qverdict.yes { color: var(--good); }
   .qverdict.no { color: var(--warn); }
+  /* The answer that was typed, kept on the card once its box has gone. */
+  .qsaid { margin-top: 10px; padding: 12px; font-size: 1rem; border-radius: 9px;
+           border: 1.5px solid var(--line); color: var(--ink); min-height: 46px; }
   .stop.wrong { animation: shake .35s; }
   @keyframes shake { 25% { transform: translateX(-6px) } 75% { transform: translateX(6px) } }
 
@@ -531,7 +555,7 @@ function answerAccepted(given, accepted) {
 /* ---- state ---- */
 function freshState() {
   return { current: 0, gate: {}, cont: {}, matched: {}, result: {}, used: {},
-           skipped: {}, revealed: {}, seen: [] };
+           skipped: {}, revealed: {}, answer: {}, seen: [] };
 }
 // Which parts of a stop were skipped: {gate, match, question}, each true or absent.
 function skippedParts(s) { return STATE.skipped[s.id] || {}; }
@@ -547,11 +571,21 @@ function skipButton(label, onTap) {
 }
 
 /* ---- a name that resolves ----
-   Until the phone is within reveal.at_m of the target on a usable fix, the
-   card says what the content says. After that it says where it is, and it
-   never goes back: a fix that wobbles out past the line does not un-name the
-   place. The pass reveals it too, for a phone that got there without a fix
-   ever reading under the line. */
+   With reveal.at_m: until the phone is within that of the target on a usable
+   fix, the card says what the content says. After that it says where it is,
+   and it never goes back: a fix that wobbles out past the line does not
+   un-name the place. The pass reveals it too, for a phone that got there
+   without a fix ever reading under the line.
+   Without at_m: the name comes with the finish, whatever finishes the stop. */
+// What finishes a stop: Progress on its match if it has one, else its
+// question, else its gate. A skip is not a finish, so it names nothing.
+function completesOn(s) {
+  if (s.lens && s.lens.kind === "stencil" && s.lens.match) return "match";
+  if (s.question) return "question";
+  if (s.gate) return "gate";
+  return null;
+}
+function revealsOnFinish(s) { return !!(s.reveal && s.reveal.at_m == null); }
 // name is what a one-line mention of the stop says: its title if it has one,
 // its chapter otherwise.
 function labelOf(s) {
@@ -729,12 +763,58 @@ function imageFigure(b) {
   return fig;
 }
 
-// Blocks in order: an image appears whole the moment its turn comes, a text
-// block is written out a word at a time and the block after it waits, and a
-// pause block is a held breath before the next one. Rushing dumps whatever is
-// left at once, pauses included.
-function runBlocks(host, blocks, key, done) {
-  const run = { rush: REDUCED || seenSet().has(key), active: null, timer: null, flush: null };
+// A picture is uncovered from the top down, a soft edge travelling over it
+// like a sheet drawn back, and the block after it waits for the last of it.
+// It registers under its key like a paragraph, so the triple tap finishes it.
+const IMAGE_REVEAL_MS = 2600;
+const IMAGE_EDGE_PCT = 24;          // how soft the edge is, in percent of height
+function revealFigure(fig, key, onDone) {
+  const img = fig.querySelector("img");
+  let raf = null, t0 = null, finished = false, waiting = null;
+  const mask = (edge) => {
+    const m = edge >= 100 + IMAGE_EDGE_PCT ? ""
+      : `linear-gradient(to bottom, #000 ${Math.max(0, edge - IMAGE_EDGE_PCT)}%, rgba(0,0,0,0) ${edge}%)`;
+    fig.style.webkitMaskImage = m;
+    fig.style.maskImage = m;
+  };
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (raf) cancelAnimationFrame(raf);
+    clearTimeout(waiting);
+    mask(200);
+    typing.delete(key);
+    if (onDone) onDone();
+  };
+  const frame = (now) => {
+    if (finished) return;
+    if (t0 === null) t0 = now;
+    const p = Math.min(1, (now - t0) / IMAGE_REVEAL_MS);
+    mask((1 - Math.pow(1 - p, 2)) * (100 + IMAGE_EDGE_PCT));
+    if (p < 1) raf = requestAnimationFrame(frame); else finish();
+  };
+  const start = () => { if (!finished && raf === null) raf = requestAnimationFrame(frame); };
+  mask(0);                                     // hidden from the first frame
+  typing.set(key, { finish });
+  // The uncovering only makes sense over a picture that has arrived. They are
+  // fetched on the opening screen, so this is nearly always at once; a slow
+  // one gets a few seconds and is then shown whole rather than never.
+  waiting = setTimeout(start, 4000);
+  if (img.complete && img.naturalWidth) start();
+  else {
+    img.addEventListener("load", start, { once: true });
+    img.addEventListener("error", finish, { once: true });
+  }
+  return finish;
+}
+
+// Blocks in order: a picture is uncovered, a text block is written out a word
+// at a time and the block after it waits, and a pause block is a held breath
+// before the next one. Rushing dumps whatever is left at once, pauses
+// included. `shown` is for a card being rebuilt rather than read: everything
+// at once, whatever has or has not been seen.
+function runBlocks(host, blocks, key, done, shown) {
+  const run = { rush: shown || REDUCED || seenSet().has(key), active: null, timer: null, flush: null };
   let idx = 0;
   const step = () => {
     run.timer = null;
@@ -742,7 +822,14 @@ function runBlocks(host, blocks, key, done) {
       const b = blocks[idx];
       const k = key + ":" + idx;
       idx += 1;
-      if (b.type === "image") { host.appendChild(imageFigure(b)); continue; }
+      if (b.type === "image") {
+        const fig = imageFigure(b);
+        host.appendChild(fig);
+        if (run.rush) continue;
+        run.active = k;
+        revealFigure(fig, k, step);
+        return;                        // the uncovering calls step() when it is done
+      }
       if (b.type === "pause") {
         if (run.rush) continue;        // nothing to wait for once it is all shown
         run.active = k;
@@ -808,31 +895,53 @@ function renderWalk() {
 
   const box = $("walk");
   box.innerHTML = "";
-  for (let i = 0; i < done; i++) box.appendChild(pastLine(i));
+  for (let i = 0; i < done; i++) box.appendChild(doneCard(i));
   box.appendChild(done === n ? outroCard() : openCard(done));
   focusCurrent();
 }
 
-function pastLine(i) {
-  const s = HUNT.stops[i];
+// How a finished stop went, for the word in its header.
+function statusOf(s) {
   const res = stopResult(s);
-  const div = document.createElement("div");
-  div.className = "past" + (res === "wrong" ? " miss" : "");
   const parts = Object.keys(skippedParts(s)).filter((p) => p !== "question");
   const word = res === "right" ? "Right" : res === "wrong" ? "Wrong"
              : res === "skipped" ? "Skipped" : "Done";
   const PART = { gate: "check", match: "match" };
-  const extra = parts.length ? ` · skipped ${parts.map((p) => PART[p] || p).join(", ")}` : "";
-  div.innerHTML = `<span class="pt">${escapeHtml(labelOf(s).name)}</span>
-    <span class="pr">${word}${extra}</span>`;
-  if (s.lens) {
-    const b = document.createElement("button");
-    b.className = "lensbtn";
-    b.textContent = "Lens";
-    b.onclick = () => openLens(s);
-    div.appendChild(b);
+  return word + (parts.length ? ` · skipped ${parts.map((p) => PART[p] || p).join(", ")}` : "");
+}
+
+// The header of any card: the chapter, and a title only if there is one. No
+// numbering anywhere.
+function cardHead(s, status) {
+  const l = labelOf(s);
+  return `<div class="shead"><span class="chap">${escapeHtml(l.chapter)}</span>`
+    + (status ? `<span class="pr">${escapeHtml(status)}</span>` : "") + `</div>`
+    + (l.title ? `<div class="stitle">${escapeHtml(l.title)}</div>` : "");
+}
+
+// A finished stop, rebuilt whole and left on the page above the open one: the
+// words and pictures as they were read, the answer that was typed and the
+// letters it left. None of its controls, since there is nothing left to do.
+function doneCard(i) {
+  const s = HUNT.stops[i];
+  const div = document.createElement("div");
+  div.className = "stop done" + (stopResult(s) === "wrong" ? " miss" : "");
+  div.dataset.idx = i;
+  div.innerHTML = cardHead(s, statusOf(s));
+  runBlocks(div, s.body, "body:" + s.id, null, true);
+  if (s.question) div.appendChild(verdictLine(s));
+  if (s.letters) div.appendChild(lettersBox(s, false));
+  const after = s.after || [];
+  if (after.length) {
+    div.appendChild(payRule());
+    runBlocks(div, after, "after:" + s.id, null, true);
   }
   return div;
+}
+function payRule() {
+  const rule = document.createElement("div");
+  rule.className = "payrule";
+  return rule;
 }
 
 // The open stop. Each part is appended by the part before it finishing, so the
@@ -840,13 +949,9 @@ function pastLine(i) {
 function openCard(i) {
   const s = HUNT.stops[i];
   const div = document.createElement("div");
-  div.className = "stop";
+  div.className = "stop open";
   div.dataset.idx = i;
-  // No numbering. The chapter is the header, and a title only if there is one.
-  const l = labelOf(s);
-  div.innerHTML =
-    `<div class="shead"><span class="chap">${escapeHtml(l.chapter)}</span></div>`
-    + (l.title ? `<div class="stitle">${escapeHtml(l.title)}</div>` : "");
+  div.innerHTML = cardHead(s, "");
 
   const runs = [];
   attachRush(div, runs);
@@ -906,13 +1011,56 @@ function afterGate(card, i, runs) {
 function afterResolved(card, i, runs) {
   const s = HUNT.stops[i];
   if (!stopResult(s)) { STATE.result[s.id] = "done"; saveState(); }
+  if (s.letters) {
+    // The tiles arrive one by one the first time the finish is seen, and are
+    // simply there on every rebuild after that.
+    const key = "letters:" + s.id;
+    const first = !seenSet().has(key);
+    card.appendChild(lettersBox(s, first && !REDUCED));
+    if (first) markSeen(key);
+  }
   const blocks = s.after || [];
   const finish = () => card.appendChild(nextRow(i));
   if (!blocks.length) { finish(); return; }
-  const rule = document.createElement("div");
-  rule.className = "payrule";
-  card.appendChild(rule);
+  card.appendChild(payRule());
   runs.push(runBlocks(card, blocks, "after:" + s.id, finish));
+}
+
+/* ---- the letters a stop leaves behind ----
+   Tiles on the card once the stop is finished, however it was finished. In
+   the content's order, or scrambled by a fixed shuffle of the stop's name, so
+   every phone on the team shows the same order and none shows the true one.
+   The true order is what the ending puts back together. */
+function lettersOf(s) {
+  const text = s.letters.text.replace(/\s+/g, "").toUpperCase().split("");
+  return s.letters.scrambled && text.length > 1 ? shuffled(text, s.id) : text;
+}
+function shuffled(arr, seed) {
+  let h = 2166136261;
+  for (const c of seed) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  const rnd = () => {
+    h ^= h << 13; h >>>= 0; h ^= h >>> 17; h ^= h << 5; h >>>= 0;
+    return h / 4294967296;
+  };
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  if (out.join("") === arr.join("")) out.push(out.shift());
+  return out;
+}
+function lettersBox(s, live) {
+  const box = document.createElement("div");
+  box.className = "letters" + (live ? " live" : "");
+  lettersOf(s).forEach((ch, n) => {
+    const tile = document.createElement("span");
+    tile.className = "tile";
+    tile.textContent = ch;
+    if (live) tile.style.animationDelay = (n * 110) + "ms";
+    box.appendChild(tile);
+  });
+  return box;
 }
 
 function nextRow(i) {
@@ -920,7 +1068,8 @@ function nextRow(i) {
   row.className = "srow";
   const btn = document.createElement("button");
   btn.className = "btn primary";
-  btn.textContent = "Next";        // the outro is the next thing, even after the last stop
+  // The ending is the next thing after the last stop, and Finish says so.
+  btn.textContent = i === HUNT.stops.length - 1 ? "Finish" : "Next";
   btn.setAttribute("data-strong", "");
   btn.onclick = () => {
     STATE.current = Math.max(STATE.current, i + 1);
@@ -948,10 +1097,10 @@ function openLens(s) {
     getAccuracy: () => (lastFix && lastFix.accuracy != null ? lastFix.accuracy : null),
     logLine,
     // Progress was tapped: the lens has closed and ticked, the stop goes on.
-    // With no gate to approach, this is where a name resolves.
+    // A name that comes with the finish comes here, gate or no gate.
     onProgress: () => {
       STATE.matched[s.id] = true;
-      if (!s.gate) reveal(s);
+      if (revealsOnFinish(s)) reveal(s);
       saveState();
       renderWalk();
     },
@@ -1050,14 +1199,16 @@ function aboutM(d) {
 // One watch feeds three things while the gate card is open. The bearing only
 // on a fix good enough to mean anything, and only from far enough away that
 // it is a direction rather than a finder: under COMPASS_MIN_M it shows
-// nothing, not "close", nothing. The distance from every usable fix, all the
-// way in. And the name, once, when a usable fix reads under reveal.at_m.
+// nothing, not "close", nothing, unless the stop asks for it all the way in
+// with compass_min_m of zero. The distance from every usable fix, all the way
+// in. And the name, once, when a usable fix reads under reveal.at_m.
 function startFixWatch(s, els) {
+  const minM = s.compass_min_m == null ? COMPASS_MIN_M : s.compass_min_m;
   const paint = (lat, lon, acc) => {
     const usable = (acc || 0) <= ACC_USELESS_M;
     const d = haversineM(lat, lon, s.gate.lat, s.gate.lon);
     if (els.compass) {
-      if (!usable || d <= COMPASS_MIN_M) { els.compass.hidden = true; }
+      if (!usable || d <= minM) { els.compass.hidden = true; }
       else {
         els.compass.querySelector(".pt").textContent =
           compassPoint(lat, lon, s.gate.lat, s.gate.lon);
@@ -1163,7 +1314,9 @@ async function checkin(i, btn, stat, els) {
   // The check's own fix is a fix like any other for the name.
   if (s.reveal && s.reveal.at_m > 0 && (c.accuracy || 0) <= ACC_USELESS_M && d <= s.reveal.at_m) reveal(s);
   if (gatePasses(d, c.accuracy, s.gate.radius_m)) {
-    reveal(s);                    // a pass names the place whatever the fixes said
+    // A pass names the place whatever the fixes said, unless the name is
+    // waiting for a match or a question further down the card.
+    if (!revealsOnFinish(s) || completesOn(s) === "gate") reveal(s);
     STATE.gate[s.id] = true;
     saveState();
     stat.textContent = "You're here.";
@@ -1211,12 +1364,15 @@ function questionSection(i) {
   const submit = (viaKey) => {
     const said = inp.value.trim();
     if (!said) { toast("Type something first."); return; }
+    // What was typed stays on the card after the box has gone, right or not.
+    STATE.answer[s.id] = said;
     if (answerAccepted(said, q.answers)) {
       // A right answer is a progress moment: the strong pattern, synchronously,
       // before anything. On the Check button it replaces the single pulse
       // the tap already started; from the keyboard it is the only tick.
       haptic(true);
       STATE.result[s.id] = "right";
+      if (revealsOnFinish(s) && completesOn(s) === "question") reveal(s);
       saveState();
       renderWalk();
       return;
@@ -1226,7 +1382,11 @@ function questionSection(i) {
     // the second wrong answer kept writing one.
     const used = (STATE.used[s.id] || 0) + 1;
     STATE.used[s.id] = used;
-    if (used >= limit) STATE.result[s.id] = "wrong";
+    if (used >= limit) {
+      STATE.result[s.id] = "wrong";
+      // Out of guesses is still the finish of the stop, and the name comes.
+      if (revealsOnFinish(s) && completesOn(s) === "question") reveal(s);
+    }
     saveState();
     if (used >= limit) { renderWalk(); return; }
     const card = wrap.closest(".stop");
@@ -1251,8 +1411,9 @@ function questionSection(i) {
   return wrap;
 }
 
-// A resolved question keeps its ask on the card, so the pay-off underneath is
-// read against the thing that was asked rather than on its own.
+// A resolved question keeps its ask on the card, and what was typed, so the
+// pay-off underneath is read against the thing that was asked rather than
+// on its own.
 function verdictLine(s) {
   const wrap = document.createElement("div");
   const res = stopResult(s);
@@ -1262,21 +1423,88 @@ function verdictLine(s) {
   const verdict = res === "right" ? "Yes."
                 : res === "skipped" ? "Skipped."
                 : `Marked wrong. The answer was ${escapeHtml(shown)}.`;
+  const said = STATE.answer[s.id];
   wrap.innerHTML =
-    `<div class="qask">${escapeHtml(s.question.ask)}</div>
-     <div class="qverdict ${res === "right" ? "yes" : res === "skipped" ? "" : "no"}">${verdict}</div>`;
+    `<div class="qask">${escapeHtml(s.question.ask)}</div>`
+    + (said ? `<div class="qsaid">${escapeHtml(said)}</div>` : "")
+    + `<div class="qverdict ${res === "right" ? "yes" : res === "skipped" ? "" : "no"}">${verdict}</div>`;
   return wrap;
 }
 
-/* ---- the ending ---- */
+/* ---- the ending ----
+   Below the finished stops, which stay where they are. First the letters
+   every stop left behind, on one line in the stops' order, arriving one at
+   a time; then, after a held moment, each slides to its place in the finale
+   and the line reads what it was always going to read. Then the outro, and
+   in test mode the tally. */
+const FINALE_LETTER_MS = 150;       // between letters arriving on the line
+const FINALE_HOLD_MS = 1200;        // the jumbled line held before it moves
+const FINALE_SLIDE_MS = 1700;       // the slide, matching the CSS transition
 function outroCard() {
   const div = document.createElement("div");
-  div.className = "stop";
+  div.className = "stop open end";
   div.dataset.idx = "end";
   const runs = [];
   attachRush(div, runs);
-  runs.push(runBlocks(div, HUNT.outro || [], "outro", () => div.appendChild(tally())));
+  const rest = () => {
+    runs.push(runBlocks(div, HUNT.outro || [], "outro", () => {
+      if (HUNT.test_mode) div.appendChild(tally());
+    }));
+  };
+  if (HUNT.finale) finale(div, rest); else rest();
   return div;
+}
+
+function finale(host, done) {
+  const letters = HUNT.stops.filter((s) => s.letters)
+    .flatMap((s) => s.letters.text.replace(/\s+/g, "").toUpperCase().split(""));
+  const target = HUNT.finale.toUpperCase().split("");
+  const n = Math.max(target.length, letters.length);
+  const line = document.createElement("div");
+  line.className = "finale";
+  line.style.setProperty("--n", n);
+  line.setAttribute("aria-label", HUNT.finale);
+  host.appendChild(line);
+
+  // Each letter's slot in the finale: the first unused letter of the same
+  // kind, left to right. The build has already checked they all have one.
+  const used = new Set();
+  const slot = letters.map(() => null);
+  target.forEach((ch, at) => {
+    if (ch === " ") return;
+    const k = letters.findIndex((c, i) => c === ch && !used.has(i));
+    if (k >= 0) { used.add(k); slot[k] = at; }
+  });
+  const spans = letters.map((ch, k) => {
+    const sp = document.createElement("span");
+    sp.className = "fl";
+    sp.textContent = ch;
+    sp.style.left = (100 * k / n) + "%";
+    line.appendChild(sp);
+    return sp;
+  });
+  const place = (sp, k) => { sp.style.left = (100 * (slot[k] == null ? k : slot[k]) / n) + "%"; };
+  const settled = () => {
+    spans.forEach((sp, k) => { place(sp, k); sp.classList.add("on"); sp.classList.remove("moving"); });
+    line.classList.add("resolved");
+  };
+  if (seenSet().has("finale") || REDUCED) { settled(); done(); return; }
+
+  let k = 0;
+  const arrive = () => {
+    if (k < spans.length) { spans[k].classList.add("on"); k += 1; setTimeout(arrive, FINALE_LETTER_MS); return; }
+    setTimeout(slide, FINALE_HOLD_MS);
+  };
+  const slide = () => {
+    spans.forEach((sp) => sp.classList.add("moving"));
+    requestAnimationFrame(() => spans.forEach(place));
+    setTimeout(() => {
+      spans.forEach((sp) => sp.classList.remove("moving"));
+      line.classList.add("resolved");
+    }, FINALE_SLIDE_MS);
+    setTimeout(() => { markSeen("finale"); done(); }, FINALE_SLIDE_MS + 700);
+  };
+  setTimeout(arrive, 500);
 }
 
 // Right and wrong are questions. Skipped is parts: a gate, a match or a
@@ -1547,7 +1775,7 @@ function renderIntro() {
   if (!STATE || typeof STATE.current !== "number") STATE = freshState();
   // A walk saved by an earlier build predates some of these. Fill them in
   // rather than start the phone over.
-  for (const k of ["gate", "cont", "matched", "result", "used", "skipped", "revealed"]) {
+  for (const k of ["gate", "cont", "matched", "result", "used", "skipped", "revealed", "answer"]) {
     STATE[k] = STATE[k] || {};
   }
   STATE.seen = STATE.seen || [];
